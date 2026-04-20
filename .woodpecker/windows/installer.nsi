@@ -29,7 +29,7 @@
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\email-rs"
 
 Name          "${APP_NAME} ${APP_VERSION}"
-OutFile       "${OUTPUT_DIR}${/}email-rs-${APP_VERSION}-installer.exe"
+OutFile       "${OUTPUT_DIR}/email-rs-${APP_VERSION}-installer.exe"
 InstallDir    "$PROGRAMFILES64\email-rs"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
@@ -54,13 +54,13 @@ Section "email-rs" SecMain
   no_prev_install:
 
   SetOutPath "$INSTDIR"
-  File "${STAGING}${/}email-server.exe"
-  File "${STAGING}${/}email-rs-svc.exe"
-  File "${SCRIPTS}${/}setup-service.bat"
-  File "${SCRIPTS}${/}uninstall-service.bat"
+  File "${STAGING}/email-server.exe"
+  File "${STAGING}/email-rs-svc.exe"
+  File "${SCRIPTS}/setup-service.bat"
+  File "${SCRIPTS}/uninstall-service.bat"
 
   SetOutPath "$INSTDIR\static"
-  File /r "${STAGING}${/}static${/}*.*"
+  File /r "${STAGING}/static/*.*"
 
   ; Create data directory for SQLite DB (WinSW service workdir)
   CreateDirectory "$PROGRAMDATA\email-rs"
