@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  email-rs Windows Installer — WiX v5
+  Build (from CI, after harvest-static.py has generated static-files.wxs):
+
+    wix build installer.wxs static-files.wxs \
+      -ext WixToolset.UI.wixext \
+      -ext WixToolset.Util.wixext \
+      -d AppVersion=<X.Y.Z> \
+      -d Staging=<abs-path-to-staging-dir> \
+      -d Scripts=<abs-path-to-.woodpecker/windows> \
+      -out email-rs-<X.Y.Z>.msi
+
+  Variables:
+    AppVersion  — e.g. 1.2.3  (no leading v)
+    Staging     — staging dir containing email-server.exe, nssm.exe, static/
+    Scripts     — dir containing setup-service.bat, uninstall-service.bat
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Package
+    Name="email-rs"
+    Version="$(var.AppVersion)"
+    Manufacturer="sprooty"
+    UpgradeCode="{6E4A3F9D-2B5C-4A17-89CD-F0E3B2C1A8D4}"
+    InstallerVersion="500"
+    Scope="perMachine"
+    Compressed="yes">
+
+    <SummaryInformation Description="email-rs — self-hosted email and calendar client" />
+
+    <!--
+      MajorUpgrade: silently remove any previously installed version before
+      installing this one. Prevents side-by-side installations.
+    -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of email-rs is already installed." />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Feature Id="MainFeature" Title="email-rs" Level="1">
+      <ComponentGroupRef Id="AppBinaries" />
+      <ComponentGroupRef Id="StaticFiles" />
+      <ComponentRef Id="CmpDataDir" />
+    </Feature>
+
+    <!--
+      Service management via NSSM batch scripts — deferred custom actions.
+
+      SetProperty runs immediately (not deferred), so [INSTALLDIR] etc. expand
+      correctly. The resulting string becomes CustomActionData for the matching
+      deferred util:WixQuietExec64 action, which reads its own name as the
+      property and executes the value as a command.
+    -->
+    <SetProperty Id="DoInstallService" Before="DoInstallService" Sequence="execute"
+      Value="cmd.exe /c &quot;[INSTALLDIR]setup-service.bat&quot; &quot;[INSTALLDIR]&quot; &quot;[CommonAppDataFolder]email-rs\&quot;" />
+
+    <SetProperty Id="RollbackInstallService" Before="RollbackInstallService" Sequence="execute"
+      Value="cmd.exe /c &quot;[INSTALLDIR]nssm.exe&quot; remove email-rs confirm" />
+
+    <SetProperty Id="DoUninstallService" Before="DoUninstallService" Sequence="execute"
+      Value="cmd.exe /c &quot;[INSTALLDIR]uninstall-service.bat&quot; &quot;[INSTALLDIR]&quot;" />
+
+    <!-- Deferred: executes the command stored in CustomActionData (set by SetProperty above) -->
+    <util:WixQuietExec64 Id="DoInstallService"   Execute="deferred" Return="check"  Impersonate="no" />
+    <util:WixQuietExec64 Id="RollbackInstallService" Execute="rollback" Return="ignore" Impersonate="no" />
+    <util:WixQuietExec64 Id="DoUninstallService" Execute="deferred" Return="ignore" Impersonate="no" />
+
+    <InstallExecuteSequence>
+      <!-- Uninstall: stop and remove service before files are deleted -->
+      <Custom Action="DoUninstallService" Before="RemoveFiles">
+        Installed AND REMOVE="ALL"
+      </Custom>
+      <!-- Install: schedule rollback handler before the main action -->
+      <Custom Action="RollbackInstallService" Before="DoInstallService">
+        NOT Installed
+      </Custom>
+      <!-- Install: set up service after all files are in place -->
+      <Custom Action="DoInstallService" After="InstallFiles">
+        NOT Installed
+      </Custom>
+    </InstallExecuteSequence>
+
+    <!-- Standard directory-picking wizard; supports /qn for silent install -->
+    <ui:WixUI Id="WixUI_InstallDir" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
+  </Package>
+
+  <!-- ── Directory layout ──────────────────────────────────────────────── -->
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="email-rs">
+          <Directory Id="STATICDIR" Name="static" />
+        </Directory>
+      </Directory>
+      <Directory Id="CommonAppDataFolder">
+        <!-- Data dir created on install, intentionally preserved on uninstall -->
+        <Directory Id="DATADIRROOT" Name="email-rs" />
+      </Directory>
+    </Directory>
+  </Fragment>
+
+  <!-- ── App binaries + service scripts ───────────────────────────────── -->
+  <Fragment>
+    <ComponentGroup Id="AppBinaries" Directory="INSTALLDIR">
+      <Component Id="CmpEmailServer" Guid="*">
+        <File Id="FileEmailServer" Source="$(var.Staging)/email-server.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpNssm" Guid="*">
+        <File Id="FileNssm" Source="$(var.Staging)/nssm.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpSetupService" Guid="*">
+        <File Id="FileSetupService" Source="$(var.Scripts)/setup-service.bat" KeyPath="yes" />
+      </Component>
+      <Component Id="CmpUninstallService" Guid="*">
+        <File Id="FileUninstallService" Source="$(var.Scripts)/uninstall-service.bat" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+
+  <!-- ── Data directory (created on install, kept on uninstall) ────────── -->
+  <Fragment>
+    <Component Id="CmpDataDir" Directory="DATADIRROOT" Guid="*">
+      <CreateFolder />
+    </Component>
+  </Fragment>
+
+</Wix>

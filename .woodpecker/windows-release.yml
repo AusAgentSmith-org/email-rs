@@ -1,6 +1,13 @@
-# Builds a Windows installer and uploads it as a Forgejo release asset.
-# Triggers: version tags (v*) and manual runs only — quality checks run
-# separately via the Forgejo Actions CI on every push.
+# Builds a Windows .msi installer and uploads it as a Forgejo release asset.
+# Triggers: version tags (v*) and manual runs — quality checks run separately
+# via Forgejo Actions CI on every push.
+#
+# The installer is a proper Windows Installer (.msi) built with WiX v5,
+# following Windows Installer best practices:
+#   - MajorUpgrade: previous versions are cleanly removed before installing new one
+#   - Silent install supported via standard /qn MSI flag
+#   - Rollback: if service setup fails, the rollback CA removes the service
+#   - Data preserved: C:\ProgramData\email-rs\ is kept on uninstall
 when:
   - event: tag
     ref: refs/tags/v*
@@ -47,7 +54,7 @@ steps:
           -d "{\"tag_name\":\"$TAG\",\"target_commitish\":\"$CI_COMMIT_SHA\",\"name\":\"$TITLE\",\"body\":\"$BODY\",\"draft\":false,\"prerelease\":$PRERELEASE}"
         echo "Release $TAG created."
 
-  # ── Windows installer (cross-compiled from Linux via cargo-xwin) ──────────
+  # ── Windows .msi installer (cross-compiled from Linux) ───────────────────
   - name: build-windows
     image: *rust_image
     depends_on: [create-release]
@@ -60,14 +67,21 @@ steps:
       - apt-get update -qq
       - |
         DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-          lld clang llvm curl wget jq unzip pkg-config libssl-dev nsis
+          lld clang llvm curl wget jq unzip pkg-config libssl-dev \
+          dotnet-sdk-8.0
       - curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs
 
       # Strip local [patch] overrides (don't exist in CI)
       - sed -i '/^\[patch\]/,/^$/d' Cargo.toml || true
       - sed -i '/^\[patch\]/,/^$/d' crates/email-server/Cargo.toml || true
 
-      # Build React frontend into a staging dir
+      # Install WiX v5 + required extensions
+      - dotnet tool install --global wix
+      - export PATH="$PATH:$HOME/.dotnet/tools"
+      - wix extension add WixToolset.UI.wixext
+      - wix extension add WixToolset.Util.wixext
+
+      # Build React frontend
       - cd frontend && npm ci && npx vite build --outDir /tmp/email-rs-static --emptyOutDir && cd ..
 
       # Cross-compile Rust binary for Windows (MSVC target via cargo-xwin)
@@ -75,32 +89,42 @@ steps:
       - cargo install --locked cargo-xwin --version 0.19.2
       - cargo xwin build --release --target x86_64-pc-windows-msvc -p email-server
 
-      # Download NSSM — wraps any executable as a Windows service
+      # Download NSSM (Windows service wrapper — bundled into the installer)
       - wget -q https://nssm.cc/release/nssm-2.24.zip -O /tmp/nssm.zip
       - unzip -q /tmp/nssm.zip -d /tmp/nssm-extracted
 
-      # Stage all inputs for the NSIS installer
+      # Stage all installer inputs
       - mkdir -p .nsis-staging
       - cp target/x86_64-pc-windows-msvc/release/email-server.exe .nsis-staging/
       - cp /tmp/nssm-extracted/nssm-2.24/win64/nssm.exe .nsis-staging/
       - cp -r /tmp/email-rs-static .nsis-staging/static
 
-      # Build the NSIS installer (output lands in workspace root)
+      # Generate WiX fragment for static files, then build the .msi
       - |
-        VERSION="${CI_COMMIT_TAG:-dev}"
-        makensis \
-          -DAPP_VERSION="$VERSION" \
-          -DSTAGING="$(pwd)/.nsis-staging" \
-          -DOUTPUT_DIR="$(pwd)" \
-          .woodpecker/windows/installer.nsi
+        VERSION="${CI_COMMIT_TAG:-v0.0.0}"
+        VERSION="${VERSION#v}"   # strip leading 'v'
+        STAGING="$(pwd)/.nsis-staging"
+        SCRIPTS="$(pwd)/.woodpecker/windows"
 
-      # Upload installer .exe to the Forgejo release
+        python3 "$SCRIPTS/harvest-static.py" "$STAGING" > static-files.wxs
+
+        wix build \
+          .woodpecker/windows/installer.wxs \
+          static-files.wxs \
+          -ext WixToolset.UI.wixext \
+          -ext WixToolset.Util.wixext \
+          -d AppVersion="$VERSION" \
+          -d Staging="$STAGING" \
+          -d Scripts="$SCRIPTS" \
+          -out "email-rs-${VERSION}.msi"
+
+      # Upload .msi to the Forgejo release
       - |
         TAG="${CI_COMMIT_TAG:-latest}"
         REL_ID=$(curl -sf -H "Authorization: token $FORGEJO_TOKEN" \
           "https://repo.indexarr.net/api/v1/repos/$CI_REPO/releases/tags/$TAG" \
           | jq -r '.id')
-        find . -maxdepth 1 -name 'email-rs-*-installer.exe' | while read f; do
+        find . -maxdepth 1 -name 'email-rs-*.msi' | while read f; do
           echo "Uploading $(basename "$f")"
           curl -sf -X POST -H "Authorization: token $FORGEJO_TOKEN" \
             -F "attachment=@$f" \
