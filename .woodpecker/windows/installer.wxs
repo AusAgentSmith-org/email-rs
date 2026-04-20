@@ -10,11 +10,6 @@
       -d Staging=<abs-path-to-staging-dir> \
       -d Scripts=<abs-path-to-.woodpecker/windows> \
       -out email-rs-<X.Y.Z>.msi
-
-  Variables:
-    AppVersion  — e.g. 1.2.3  (no leading v)
-    Staging     — staging dir containing email-server.exe, nssm.exe, static/
-    Scripts     — dir containing setup-service.bat, uninstall-service.bat
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
@@ -42,16 +37,16 @@
     <Feature Id="MainFeature" Title="email-rs" Level="1">
       <ComponentGroupRef Id="AppBinaries" />
       <ComponentGroupRef Id="StaticFiles" />
-      <ComponentRef Id="CmpDataDir" />
     </Feature>
 
     <!--
-      Service management via NSSM batch scripts — deferred custom actions.
+      Service management via WinSW batch scripts — deferred custom actions.
 
       SetProperty runs immediately (not deferred), so [INSTALLDIR] etc. expand
       correctly. The resulting string becomes CustomActionData for the matching
-      deferred util:WixQuietExec64 action, which reads its own name as the
-      property and executes the value as a command.
+      deferred util:WixQuietExec64 action.
+      [CommonAppDataFolder] is a built-in Windows Installer property that
+      expands to C:\ProgramData\ — no Directory declaration needed.
     -->
     <SetProperty Id="DoInstallService" Before="DoInstallService" Sequence="execute"
       Value="cmd.exe /c &quot;[INSTALLDIR]setup-service.bat&quot; &quot;[INSTALLDIR]&quot; &quot;[CommonAppDataFolder]email-rs\&quot;" />
@@ -62,21 +57,17 @@
     <SetProperty Id="DoUninstallService" Before="DoUninstallService" Sequence="execute"
       Value="cmd.exe /c &quot;[INSTALLDIR]uninstall-service.bat&quot; &quot;[INSTALLDIR]&quot;" />
 
-    <!-- Deferred: executes the command stored in CustomActionData (set by SetProperty above) -->
     <util:WixQuietExec64 Id="DoInstallService"   Execute="deferred" Return="check"  Impersonate="no" />
     <util:WixQuietExec64 Id="RollbackInstallService" Execute="rollback" Return="ignore" Impersonate="no" />
     <util:WixQuietExec64 Id="DoUninstallService" Execute="deferred" Return="ignore" Impersonate="no" />
 
     <InstallExecuteSequence>
-      <!-- Uninstall: stop and remove service before files are deleted -->
       <Custom Action="DoUninstallService" Before="RemoveFiles">
         Installed AND REMOVE="ALL"
       </Custom>
-      <!-- Install: schedule rollback handler before the main action -->
       <Custom Action="RollbackInstallService" Before="DoInstallService">
         NOT Installed
       </Custom>
-      <!-- Install: set up service after all files are in place -->
       <Custom Action="DoInstallService" After="InstallFiles">
         NOT Installed
       </Custom>
@@ -89,17 +80,11 @@
 
   <!-- ── Directory layout ──────────────────────────────────────────────── -->
   <Fragment>
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLDIR" Name="email-rs">
-          <Directory Id="STATICDIR" Name="static" />
-        </Directory>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="email-rs">
+        <Directory Id="STATICDIR" Name="static" />
       </Directory>
-      <Directory Id="CommonAppDataFolder">
-        <!-- Data dir created on install, intentionally preserved on uninstall -->
-        <Directory Id="DATADIRROOT" Name="email-rs" />
-      </Directory>
-    </Directory>
+    </StandardDirectory>
   </Fragment>
 
   <!-- ── App binaries + service scripts ───────────────────────────────── -->
@@ -109,7 +94,6 @@
         <File Id="FileEmailServer" Source="$(var.Staging)/email-server.exe" KeyPath="yes" />
       </Component>
       <Component Id="CmpWinSW" Guid="*">
-        <!-- WinSW renamed to email-rs-svc.exe; reads config from email-rs-svc.xml (written by setup-service.bat) -->
         <File Id="FileWinSW" Source="$(var.Staging)/email-rs-svc.exe" KeyPath="yes" />
       </Component>
       <Component Id="CmpSetupService" Guid="*">
@@ -119,13 +103,6 @@
         <File Id="FileUninstallService" Source="$(var.Scripts)/uninstall-service.bat" KeyPath="yes" />
       </Component>
     </ComponentGroup>
-  </Fragment>
-
-  <!-- ── Data directory (created on install, kept on uninstall) ────────── -->
-  <Fragment>
-    <Component Id="CmpDataDir" Directory="DATADIRROOT" Guid="*">
-      <CreateFolder />
-    </Component>
   </Fragment>
 
 </Wix>

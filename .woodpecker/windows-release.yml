@@ -104,8 +104,8 @@ steps:
 
       # Generate WiX fragment for static files, then build the .msi
       - |
-        VERSION="${CI_COMMIT_TAG:-v0.0.0}"
-        VERSION="${VERSION#v}"   # strip leading 'v'
+        RAW="${CI_COMMIT_TAG:-v0.0.0}"
+        VERSION=$(echo "$RAW" | sed 's/^v//')
         STAGING="$(pwd)/.nsis-staging"
         SCRIPTS="$(pwd)/.woodpecker/windows"
 
