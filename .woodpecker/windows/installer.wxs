@@ -57,7 +57,7 @@
       Value="cmd.exe /c &quot;[INSTALLDIR]setup-service.bat&quot; &quot;[INSTALLDIR]&quot; &quot;[CommonAppDataFolder]email-rs\&quot;" />
 
     <SetProperty Id="RollbackInstallService" Before="RollbackInstallService" Sequence="execute"
-      Value="cmd.exe /c &quot;[INSTALLDIR]nssm.exe&quot; remove email-rs confirm" />
+      Value="cmd.exe /c &quot;[INSTALLDIR]email-rs-svc.exe&quot; uninstall" />
 
     <SetProperty Id="DoUninstallService" Before="DoUninstallService" Sequence="execute"
       Value="cmd.exe /c &quot;[INSTALLDIR]uninstall-service.bat&quot; &quot;[INSTALLDIR]&quot;" />
@@ -108,8 +108,9 @@
       <Component Id="CmpEmailServer" Guid="*">
         <File Id="FileEmailServer" Source="$(var.Staging)/email-server.exe" KeyPath="yes" />
       </Component>
-      <Component Id="CmpNssm" Guid="*">
-        <File Id="FileNssm" Source="$(var.Staging)/nssm.exe" KeyPath="yes" />
+      <Component Id="CmpWinSW" Guid="*">
+        <!-- WinSW renamed to email-rs-svc.exe; reads config from email-rs-svc.xml (written by setup-service.bat) -->
+        <File Id="FileWinSW" Source="$(var.Staging)/email-rs-svc.exe" KeyPath="yes" />
       </Component>
       <Component Id="CmpSetupService" Guid="*">
         <File Id="FileSetupService" Source="$(var.Scripts)/setup-service.bat" KeyPath="yes" />

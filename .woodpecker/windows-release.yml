@@ -94,15 +94,13 @@ steps:
       - cargo install --locked cargo-xwin --version 0.19.2
       - cargo xwin build --release --target x86_64-pc-windows-msvc -p email-server
 
-      # Download NSSM (Windows service wrapper — bundled into the installer)
-      - wget -q https://nssm.cc/release/nssm-2.24.zip -O /tmp/nssm.zip
-      - unzip -q /tmp/nssm.zip -d /tmp/nssm-extracted
-
       # Stage all installer inputs
       - mkdir -p .nsis-staging
       - cp target/x86_64-pc-windows-msvc/release/email-server.exe .nsis-staging/
-      - cp /tmp/nssm-extracted/nssm-2.24/win64/nssm.exe .nsis-staging/
       - cp -r /tmp/email-rs-static .nsis-staging/static
+      # Download WinSW (Windows service wrapper from GitHub — more reliable than nssm.cc)
+      # Renamed to email-rs-svc.exe; WinSW reads config from same-named .xml at install time
+      - wget -q https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe -O .nsis-staging/email-rs-svc.exe
 
       # Generate WiX fragment for static files, then build the .msi
       - |

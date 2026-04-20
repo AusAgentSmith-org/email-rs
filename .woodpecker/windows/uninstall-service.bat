@@ -5,8 +5,8 @@ setlocal
 set "INSTALLDIR=%~1"
 
 echo [email-rs] Stopping and removing service...
-"%INSTALLDIR%nssm.exe" stop email-rs 2>nul
-"%INSTALLDIR%nssm.exe" remove email-rs confirm 2>nul
+"%INSTALLDIR%email-rs-svc.exe" stop 2>nul
+"%INSTALLDIR%email-rs-svc.exe" uninstall 2>nul
 echo [email-rs] Service removed.
 endlocal
 exit /b 0
