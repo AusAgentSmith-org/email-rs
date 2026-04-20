@@ -67,8 +67,13 @@ steps:
       - apt-get update -qq
       - |
         DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-          lld clang llvm curl wget jq unzip pkg-config libssl-dev \
-          dotnet-sdk-8.0
+          lld clang llvm curl wget jq unzip pkg-config libssl-dev
+      # Add Microsoft package feed (dotnet-sdk-8.0 not in Debian Bookworm default repos)
+      - |
+        wget -q https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb
+        dpkg -i packages-microsoft-prod.deb && rm packages-microsoft-prod.deb
+        apt-get update -qq
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends dotnet-sdk-8.0
       - curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs
 
       # Strip local [patch] overrides (don't exist in CI)
