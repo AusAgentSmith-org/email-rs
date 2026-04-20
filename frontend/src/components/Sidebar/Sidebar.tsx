@@ -254,7 +254,6 @@ interface SidebarProps {
 
 export function Sidebar({ onAccountAdded }: SidebarProps) {
   const [showAddModal, setShowAddModal] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -262,7 +261,7 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const { selectedFolderId, setSelectedFolder, setFolders, openCompose, searchQuery, setSearchQuery, conditionGroup, navigateToMessage } = useAppStore();
+  const { selectedFolderId, setSelectedFolder, setFolders, openCompose, searchQuery, setSearchQuery, conditionGroup, navigateToMessage, advancedSearchOpen, openAdvancedSearch, closeAdvancedSearch } = useAppStore();
   const navRef = useRef<HTMLElement>(null);
   const { contextMenu, openContextMenu } = useContextMenu();
 
@@ -408,7 +407,7 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
           className={`${styles.filterBtn}${conditionGroup ? ` ${styles.filterBtnActive}` : ''}`}
           type="button"
           title="Advanced search"
-          onClick={() => setAdvancedOpen(true)}
+          onClick={() => openAdvancedSearch()}
         >
           <TuneIcon />
         </button>
@@ -435,7 +434,7 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
         </div>
       )}
 
-      {advancedOpen && <AdvancedSearchModal onClose={() => setAdvancedOpen(false)} />}
+      {advancedSearchOpen && <AdvancedSearchModal onClose={closeAdvancedSearch} />}
 
       {/* Smart / virtual folders — pinned, never scrolls */}
       <div className={styles.smartSection}>

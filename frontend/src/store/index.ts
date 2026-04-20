@@ -27,6 +27,8 @@ interface AppState {
   searchQuery: string;
   conditionGroup: ConditionGroup | null;
   settingsOpen: boolean;
+  paletteOpen: boolean;
+  advancedSearchOpen: boolean;
   messages: Message[];
   selectedMessageIds: string[];
   setMessages: (msgs: Message[]) => void;
@@ -44,6 +46,10 @@ interface AppState {
   setConditionGroup: (g: ConditionGroup | null) => void;
   openSettings: () => void;
   closeSettings: () => void;
+  openPalette: () => void;
+  closePalette: () => void;
+  openAdvancedSearch: () => void;
+  closeAdvancedSearch: () => void;
   toggleMessageSelection: (id: string) => void;
   selectAllMessages: (ids: string[]) => void;
   clearMessageSelection: () => void;
@@ -64,6 +70,8 @@ export const useAppStore = create<AppState>()(
       searchQuery: '',
       conditionGroup: null,
       settingsOpen: false,
+      paletteOpen: false,
+      advancedSearchOpen: false,
       messages: [],
       selectedMessageIds: [],
 
@@ -82,6 +90,10 @@ export const useAppStore = create<AppState>()(
       setConditionGroup: (conditionGroup) => set({ conditionGroup, searchQuery: '', selectedMessageId: null, selectedMessageIds: [] }),
       openSettings: () => set({ settingsOpen: true }),
       closeSettings: () => set({ settingsOpen: false }),
+      openPalette: () => set({ paletteOpen: true }),
+      closePalette: () => set({ paletteOpen: false }),
+      openAdvancedSearch: () => set({ advancedSearchOpen: true }),
+      closeAdvancedSearch: () => set({ advancedSearchOpen: false }),
       toggleMessageSelection: (id) =>
         set((s) => ({
           selectedMessageIds: s.selectedMessageIds.includes(id)

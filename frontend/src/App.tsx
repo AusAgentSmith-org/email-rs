@@ -6,6 +6,7 @@ import { Toolbar } from './components/Toolbar/Toolbar';
 import { AccountSetup } from './components/AccountSetup/AccountSetup';
 import { ComposeModal } from './components/Compose/ComposeModal';
 import { SettingsModal } from './components/Settings/SettingsModal';
+import { CommandPalette } from './components/CommandPalette/CommandPalette';
 import { useAppStore } from './store';
 import type { Account } from './types';
 
@@ -67,7 +68,7 @@ const handleStyle: React.CSSProperties = {
 };
 
 export function App() {
-  const { theme, density, accounts, setAccounts, compose, settingsOpen } = useAppStore();
+  const { theme, density, accounts, setAccounts, compose, settingsOpen, openPalette, closePalette, paletteOpen } = useAppStore();
   const [accountsLoaded, setAccountsLoaded] = useState(false);
 
   const sidebar = usePanelResize(SIDEBAR_W_KEY,  DEFAULT_SIDEBAR_W, MIN_W, MAX_SIDEBAR_W);
@@ -75,6 +76,17 @@ export function App() {
 
   useEffect(() => { document.documentElement.setAttribute('data-theme',   theme);   }, [theme]);
   useEffect(() => { document.documentElement.setAttribute('data-density', density); }, [density]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        paletteOpen ? closePalette() : openPalette();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [paletteOpen, openPalette, closePalette]);
 
   const fetchAccounts = () => {
     fetch('/api/v1/accounts')
@@ -125,6 +137,7 @@ export function App() {
       </div>
 
       {settingsOpen && <SettingsModal onAccountDeleted={fetchAccounts} />}
+      <CommandPalette />
     </div>
   );
 }
