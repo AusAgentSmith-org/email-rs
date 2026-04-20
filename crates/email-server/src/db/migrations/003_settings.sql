@@ -1,0 +1,3 @@
+ALTER TABLE accounts ADD COLUMN sync_days_limit INTEGER;
+ALTER TABLE accounts ADD COLUMN signature TEXT;
+ALTER TABLE folders ADD COLUMN is_excluded BOOLEAN NOT NULL DEFAULT 0;

@@ -1,0 +1,503 @@
+#![allow(dead_code)]
+
+use std::sync::Arc;
+
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    response::{IntoResponse, Redirect, Response},
+    Json,
+};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::auth::oauth2::{OAuthConfig, StoredToken};
+use crate::error::{AppError, Result};
+use crate::state::AppState;
+
+// ── Query parameter structs ───────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct CallbackQuery {
+    pub code: Option<String>,
+    pub state: Option<String>,
+    pub error: Option<String>,
+    /// If provided, update this account's token instead of creating a new one.
+    pub account_id: Option<String>,
+}
+
+// ── Response types ────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct AuthorizeResponse {
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountRow {
+    pub id: String,
+    pub name: String,
+    pub email: String,
+    pub provider_type: String,
+    pub auth_type: String,
+    pub created_at: String,
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Read GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET from env.
+/// Returns None (and a 501 response) if not configured.
+fn get_oauth_config() -> Option<(String, String)> {
+    let client_id = std::env::var("GOOGLE_CLIENT_ID").ok()?;
+    let client_secret = std::env::var("GOOGLE_CLIENT_SECRET").ok()?;
+    Some((client_id, client_secret))
+}
+
+fn redirect_uri() -> String {
+    std::env::var("GOOGLE_REDIRECT_URI")
+        .unwrap_or_else(|_| "http://localhost:3000/api/v1/auth/gmail/callback".to_string())
+}
+
+fn not_configured() -> Response {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(serde_json::json!({
+            "error": "Google OAuth2 not configured — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET"
+        })),
+    )
+        .into_response()
+}
+
+// ── Microsoft helpers ─────────────────────────────────────────────────────────
+
+fn get_microsoft_oauth_config() -> Option<(String, String)> {
+    let client_id = std::env::var("MICROSOFT_CLIENT_ID").ok()?;
+    let client_secret = std::env::var("MICROSOFT_CLIENT_SECRET").ok()?;
+    Some((client_id, client_secret))
+}
+
+fn microsoft_redirect_uri() -> String {
+    std::env::var("MICROSOFT_REDIRECT_URI")
+        .unwrap_or_else(|_| "http://localhost:3000/api/v1/auth/microsoft/callback".to_string())
+}
+
+fn microsoft_not_configured() -> Response {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(serde_json::json!({
+            "error": "Microsoft OAuth2 not configured — set MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET"
+        })),
+    )
+        .into_response()
+}
+
+// ── Google userinfo ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+struct GoogleUserInfo {
+    pub email: Option<String>,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MicrosoftUserInfo {
+    pub mail: Option<String>,
+    #[serde(rename = "userPrincipalName")]
+    pub user_principal_name: Option<String>,
+    #[serde(rename = "displayName")]
+    pub display_name: Option<String>,
+}
+
+async fn fetch_microsoft_userinfo(access_token: &str) -> Result<MicrosoftUserInfo> {
+    let client = reqwest::Client::new();
+    let info = client
+        .get("https://graph.microsoft.com/v1.0/me")
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .map_err(|e| AppError::Auth(format!("Microsoft userinfo request failed: {}", e)))?
+        .json::<MicrosoftUserInfo>()
+        .await
+        .map_err(|e| AppError::Auth(format!("Microsoft userinfo parse failed: {}", e)))?;
+    Ok(info)
+}
+
+async fn fetch_userinfo(access_token: &str) -> Result<GoogleUserInfo> {
+    let client = reqwest::Client::new();
+    let info = client
+        .get("https://www.googleapis.com/oauth2/v3/userinfo")
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .map_err(|e| AppError::Auth(format!("userinfo request failed: {}", e)))?
+        .json::<GoogleUserInfo>()
+        .await
+        .map_err(|e| AppError::Auth(format!("userinfo parse failed: {}", e)))?;
+    Ok(info)
+}
+
+// ── Route handlers ────────────────────────────────────────────────────────────
+
+/// GET /api/v1/auth/gmail/authorize
+/// Returns a JSON body with the Google authorization URL.
+pub async fn gmail_authorize(State(state): State<Arc<AppState>>) -> Response {
+    let (client_id, client_secret) = match get_oauth_config() {
+        Some(c) => c,
+        None => return not_configured(),
+    };
+
+    let oauth = OAuthConfig::gmail(client_id, client_secret, redirect_uri());
+    let state_val = Uuid::new_v4().to_string();
+
+    // Store the pending state.
+    {
+        let mut map = state.oauth_states.lock().await;
+        map.insert(state_val.clone(), ());
+    }
+
+    let url = oauth.authorization_url(&state_val);
+    Json(AuthorizeResponse { url }).into_response()
+}
+
+/// GET /api/v1/auth/gmail/callback?code=...&state=...
+pub async fn gmail_callback(
+    State(app_state): State<Arc<AppState>>,
+    Query(q): Query<CallbackQuery>,
+) -> Response {
+    // Propagate provider-reported errors as a redirect.
+    if let Some(err) = q.error {
+        let encoded = urlencoding::encode(&err);
+        return Redirect::to(&format!("/?oauth=error&msg={}", encoded)).into_response();
+    }
+
+    let code = match q.code {
+        Some(c) => c,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "missing code parameter" })),
+            )
+                .into_response()
+        }
+    };
+
+    let state_val = match q.state {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "missing state parameter" })),
+            )
+                .into_response()
+        }
+    };
+
+    // Validate and consume the state token.
+    {
+        let mut map = app_state.oauth_states.lock().await;
+        if map.remove(&state_val).is_none() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "invalid or expired state" })),
+            )
+                .into_response();
+        }
+    }
+
+    let (client_id, client_secret) = match get_oauth_config() {
+        Some(c) => c,
+        None => return not_configured(),
+    };
+
+    let oauth = OAuthConfig::gmail(client_id, client_secret, redirect_uri());
+
+    // Exchange authorization code for tokens.
+    let token_resp = match oauth.exchange_code(&code).await {
+        Ok(t) => t,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response()
+        }
+    };
+
+    let stored = StoredToken::from_token_response(token_resp);
+    let token_json = match serde_json::to_string(&stored) {
+        Ok(j) => j,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response()
+        }
+    };
+
+    let token_expiry = stored.expires_at.map(|t| t.to_string());
+
+    if let Some(account_id) = q.account_id {
+        // Update existing account's token.
+        let result =
+            sqlx::query("UPDATE accounts SET oauth_token_json = ?, token_expiry = ? WHERE id = ?")
+                .bind(&token_json)
+                .bind(&token_expiry)
+                .bind(&account_id)
+                .execute(&app_state.pool)
+                .await;
+
+        match result {
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                )
+                    .into_response()
+            }
+            Ok(r) if r.rows_affected() == 0 => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({ "error": "account not found" })),
+                )
+                    .into_response()
+            }
+            _ => {}
+        }
+
+        let row = sqlx::query_as::<_, AccountRow>(
+            "SELECT id, name, email, provider_type, auth_type, created_at FROM accounts WHERE id = ?",
+        )
+        .bind(&account_id)
+        .fetch_one(&app_state.pool)
+        .await;
+
+        match row {
+            Ok(_) => Redirect::to("/?oauth=success").into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        }
+    } else {
+        // Fetch userinfo to get email + name for the new account.
+        let userinfo = match fetch_userinfo(&stored.access_token).await {
+            Ok(u) => u,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                )
+                    .into_response()
+            }
+        };
+
+        let email = userinfo.email.unwrap_or_default();
+        let name = userinfo.name.unwrap_or_else(|| email.clone());
+        let id = Uuid::new_v4().to_string();
+
+        let insert = sqlx::query(
+            r#"INSERT INTO accounts (id, name, email, provider_type, auth_type, oauth_token_json, token_expiry)
+               VALUES (?, ?, ?, 'gmail', 'oauth2', ?, ?)"#,
+        )
+        .bind(&id)
+        .bind(&name)
+        .bind(&email)
+        .bind(&token_json)
+        .bind(&token_expiry)
+        .execute(&app_state.pool)
+        .await;
+
+        if let Err(e) = insert {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response();
+        }
+
+        let row = sqlx::query_as::<_, AccountRow>(
+            "SELECT id, name, email, provider_type, auth_type, created_at FROM accounts WHERE id = ?",
+        )
+        .bind(&id)
+        .fetch_one(&app_state.pool)
+        .await;
+
+        match row {
+            Ok(_) => Redirect::to("/?oauth=success").into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response(),
+        }
+    }
+}
+
+/// GET /api/v1/auth/microsoft/authorize
+/// Returns a JSON body with the Microsoft authorization URL.
+pub async fn microsoft_authorize(State(state): State<Arc<AppState>>) -> Response {
+    let (client_id, client_secret) = match get_microsoft_oauth_config() {
+        Some(c) => c,
+        None => return microsoft_not_configured(),
+    };
+
+    let oauth = OAuthConfig::microsoft(client_id, client_secret, microsoft_redirect_uri());
+    let state_val = Uuid::new_v4().to_string();
+
+    {
+        let mut map = state.oauth_states.lock().await;
+        map.insert(state_val.clone(), ());
+    }
+
+    let url = oauth.authorization_url_microsoft(&state_val);
+    Json(AuthorizeResponse { url }).into_response()
+}
+
+/// GET /api/v1/auth/microsoft/callback?code=...&state=...
+pub async fn microsoft_callback(
+    State(app_state): State<Arc<AppState>>,
+    Query(q): Query<CallbackQuery>,
+) -> Response {
+    if let Some(err) = q.error {
+        let encoded = urlencoding::encode(&err);
+        return Redirect::to(&format!("/?oauth=error&msg={}", encoded)).into_response();
+    }
+
+    let code = match q.code {
+        Some(c) => c,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "missing code parameter" })),
+            )
+                .into_response()
+        }
+    };
+
+    let state_val = match q.state {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "missing state parameter" })),
+            )
+                .into_response()
+        }
+    };
+
+    {
+        let mut map = app_state.oauth_states.lock().await;
+        if map.remove(&state_val).is_none() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "invalid or expired state" })),
+            )
+                .into_response();
+        }
+    }
+
+    let (client_id, client_secret) = match get_microsoft_oauth_config() {
+        Some(c) => c,
+        None => return microsoft_not_configured(),
+    };
+
+    let oauth = OAuthConfig::microsoft(client_id, client_secret, microsoft_redirect_uri());
+
+    let token_resp = match oauth.exchange_code(&code).await {
+        Ok(t) => t,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response()
+        }
+    };
+
+    let stored = StoredToken::from_token_response(token_resp);
+    let token_json = match serde_json::to_string(&stored) {
+        Ok(j) => j,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response()
+        }
+    };
+
+    let token_expiry = stored.expires_at.map(|t| t.to_string());
+
+    if let Some(account_id) = q.account_id {
+        let result =
+            sqlx::query("UPDATE accounts SET oauth_token_json = ?, token_expiry = ? WHERE id = ?")
+                .bind(&token_json)
+                .bind(&token_expiry)
+                .bind(&account_id)
+                .execute(&app_state.pool)
+                .await;
+
+        match result {
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                )
+                    .into_response()
+            }
+            Ok(r) if r.rows_affected() == 0 => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({ "error": "account not found" })),
+                )
+                    .into_response()
+            }
+            _ => {}
+        }
+
+        return Redirect::to("/?oauth=success").into_response();
+    }
+
+    let userinfo = match fetch_microsoft_userinfo(&stored.access_token).await {
+        Ok(u) => u,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response()
+        }
+    };
+
+    let email = userinfo
+        .mail
+        .or(userinfo.user_principal_name)
+        .unwrap_or_default();
+    let name = userinfo.display_name.unwrap_or_else(|| email.clone());
+    let id = Uuid::new_v4().to_string();
+
+    let insert = sqlx::query(
+        r#"INSERT INTO accounts (id, name, email, provider_type, auth_type, oauth_token_json, token_expiry)
+           VALUES (?, ?, ?, 'microsoft365', 'oauth2', ?, ?)"#,
+    )
+    .bind(&id)
+    .bind(&name)
+    .bind(&email)
+    .bind(&token_json)
+    .bind(&token_expiry)
+    .execute(&app_state.pool)
+    .await;
+
+    if let Err(e) = insert {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response();
+    }
+
+    Redirect::to("/?oauth=success").into_response()
+}

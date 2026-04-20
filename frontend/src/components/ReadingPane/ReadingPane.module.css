@@ -1,0 +1,234 @@
+.readingPane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--read-bg);
+  overflow: hidden;
+}
+
+/* Empty state */
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-xdim);
+  font-size: 14px;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+
+.toolbarBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-mid);
+  font-size: 12px;
+  font-weight: 500;
+  transition: background var(--transition), color var(--transition);
+}
+.toolbarBtn:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+.toolbarBtn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.toolbarSpacer {
+  flex: 1;
+}
+
+.toolbarBtnDanger:hover {
+  background: #fdf0ef;
+  color: #c0392b;
+  border-color: #f5c6c6;
+}
+[data-theme="dark"] .toolbarBtnDanger:hover {
+  background: #2d1515;
+  color: #e07070;
+  border-color: #5a2020;
+}
+
+/* Message header */
+.messageHeader {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+
+.subject {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tag-text);
+  background: var(--tag);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.senderRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.senderMeta {
+  flex: 1;
+  min-width: 0;
+}
+
+.senderName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.senderEmail {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.messageDate {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-xdim);
+  flex-shrink: 0;
+}
+
+/* Attachments */
+.attachments {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+
+.attachment {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--tag);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.attachment:hover {
+  background: var(--row-hover);
+}
+.attachment svg {
+  width: 13px;
+  height: 13px;
+  color: var(--text-dim);
+}
+
+/* Body */
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.bodyFrame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  display: block;
+}
+
+/* Quick reply */
+.quickReply {
+  border-top: 1px solid var(--divider);
+  padding: 12px 16px;
+  flex-shrink: 0;
+}
+
+.replyArea {
+  width: 100%;
+  min-height: 72px;
+  resize: none;
+  padding: 10px 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color var(--transition);
+  margin-bottom: 8px;
+}
+.replyArea::placeholder {
+  color: var(--text-xdim);
+}
+.replyArea:focus {
+  border-color: var(--accent);
+}
+
+.replyActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sendBtn {
+  padding: 7px 16px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background var(--transition);
+}
+.sendBtn:hover {
+  background: var(--accent-hover);
+}

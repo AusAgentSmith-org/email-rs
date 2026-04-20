@@ -1,0 +1,11 @@
+/target
+/frontend/node_modules
+/frontend/dist
+*.env
+.env*
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.codesight/
+Email\ Client.zip
+design_handoff_email_client/

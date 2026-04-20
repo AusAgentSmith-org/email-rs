@@ -1,0 +1,7 @@
+target/
+frontend/node_modules/
+frontend/dist/
+.git/
+.env
+*.md
+design_handoff_email_client/

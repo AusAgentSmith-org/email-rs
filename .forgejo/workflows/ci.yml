@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: docker
+    container:
+      image: 192.168.1.75:5500/forgejo-runner-image:latest
+
+    env:
+      DATABASE_URL: sqlite:///tmp/email-test.db
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Strip [patch] sections (local overrides not available in CI)
+        run: |
+          sed -i '/^\[patch\]/,/^$/d' Cargo.toml || true
+          sed -i '/^\[patch\]/,/^$/d' crates/email-server/Cargo.toml || true
+
+      - name: Inject secrets
+        uses: https://github.com/hashicorp/infisical-action@v3
+        with:
+          client-id: ${{ secrets.infisical_client_id }}
+          client-secret: ${{ secrets.infisical_client_secret }}
+          domain: https://se.sprooty.com
+          project-id: 6d6caff5-7aaf-42f8-a135-2455d7629af8
+          env-slug: prod
+
+      - name: cargo fmt check
+        run: cargo fmt --all -- --check
+
+      - name: cargo check
+        run: cargo check --all
+
+      - name: cargo clippy
+        run: cargo clippy --all -- -D warnings
+
+      - name: cargo test
+        run: cargo test --all
+
+      - name: npm install
+        working-directory: frontend
+        run: npm ci
+
+      - name: npm build
+        working-directory: frontend
+        run: npx vite build --outDir /tmp/frontend-dist --emptyOutDir
+
+      - name: Build & push Docker image
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker buildx build \
+            --tag repo.indexarr.net/indexarr/email-rs:latest \
+            --tag repo.indexarr.net/indexarr/email-rs:${{ github.sha }} \
+            --push \
+            .
+
+      - name: Deploy via Komodo
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -e
+          curl -fsSL https://repo.indexarr.net/indexarr/ops/raw/branch/main/scripts/komodo-deploy.sh \
+            -H "Authorization: token ${{ secrets.git_auth_token }}" | \
+            bash -s -- \
+              email-rs \
+              repo.indexarr.net/indexarr/email-rs:${{ github.sha }} \
+              ${{ secrets.komodo_api_key }} \
+              ${{ secrets.komodo_api_secret }}
+
+      - name: Notify Discord
+        if: always() && github.ref == 'refs/heads/main'
+        run: |
+          STATUS="${{ job.status }}"
+          COLOR=$([ "$STATUS" = "success" ] && echo 3066993 || echo 15158332)
+          curl -s -X POST "${{ secrets.discord_webhook_url }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"embeds\":[{\"title\":\"email-rs CI — $STATUS\",\"color\":$COLOR,\"description\":\"Commit: \`${{ github.sha }}\`\"}]}"

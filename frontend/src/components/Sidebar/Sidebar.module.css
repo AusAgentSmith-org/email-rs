@@ -1,0 +1,437 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--sidebar);
+  border-right: 1px solid var(--sidebar-border);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Compose button */
+.compose {
+  margin: 12px 12px 8px;
+  padding: 8px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  transition: background var(--transition);
+  flex-shrink: 0;
+}
+.compose:hover {
+  background: var(--accent-hover);
+}
+
+/* Sync status strip */
+.syncStrip {
+  margin: 0 12px 6px;
+  padding: 5px 8px;
+  background: var(--row-hover);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.syncRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.syncSpinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--text-xdim);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: syncSpin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes syncSpin {
+  to { transform: rotate(360deg); }
+}
+
+.syncDone {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.syncText {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-sans);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.syncBar {
+  height: 2px;
+  background: var(--divider);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.syncBarFill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* Search */
+.searchWrap {
+  position: relative;
+  margin: 0 12px 8px;
+  flex-shrink: 0;
+}
+.searchIcon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  pointer-events: none;
+  width: 14px;
+  height: 14px;
+}
+.searchInput {
+  width: 100%;
+  padding: 6px 30px 6px 28px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.searchInput::placeholder {
+  color: var(--text-xdim);
+}
+.searchInput:focus {
+  border-color: var(--accent);
+}
+
+.filterBtn {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition);
+}
+.filterBtn svg {
+  width: 13px;
+  height: 13px;
+}
+.filterBtn:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+.filterBtnActive {
+  color: var(--accent);
+}
+.filterBtnActive:hover {
+  color: var(--accent-hover);
+}
+
+/* Autocomplete dropdown — rendered position:fixed to escape sidebar overflow */
+.suggestDropdown {
+  background: var(--read-bg);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: 500;
+  overflow: hidden;
+  min-width: 340px;
+}
+
+.suggestRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 0 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.suggestRow:hover,
+.suggestRowActive {
+  background: var(--row-hover);
+}
+.suggestFrom {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.suggestDate {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  align-self: center;
+}
+.suggestSubject {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  font-size: 12px;
+  color: var(--text-mid);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.suggestFooter {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--divider);
+  text-align: center;
+}
+
+/* Smart folders — pinned above scrollable nav */
+.smartSection {
+  flex-shrink: 0;
+  padding: 4px 6px;
+}
+
+/* Nav — scrollable IMAP folders only */
+.nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 6px;
+}
+
+.navSection {
+  margin-bottom: 16px;
+}
+
+.navSectionLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  padding: 4px 8px;
+  margin-bottom: 2px;
+}
+
+.folderItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  height: var(--sidebar-item-h);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-mid);
+  transition: background var(--transition), color var(--transition);
+}
+.folderItem:hover {
+  background: var(--folder-hover);
+  color: var(--text);
+}
+.folderItem.active {
+  background: var(--folder-active);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.folderIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+.folderItem.active .folderIcon,
+.folderItem:hover .folderIcon {
+  color: var(--text-mid);
+}
+
+.folderName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--accent-text);
+  background: var(--accent-bg);
+  padding: 1px 5px;
+  border-radius: var(--radius-full);
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Smart/IMAP divider */
+.divider {
+  height: 1px;
+  background: var(--divider);
+  margin: 6px 8px;
+}
+
+/* Per-account section */
+.accountSection {
+  margin-bottom: 8px;
+}
+
+.accountSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 8px 10px 4px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  transition: background var(--transition);
+}
+.accountSectionHeader:hover {
+  background: var(--folder-hover);
+  color: var(--text-mid);
+}
+
+.accountSectionName {
+  flex: 1;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.folderGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 2px 10px 2px 16px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-xdim);
+  transition: background var(--transition), color var(--transition);
+  margin-top: 4px;
+}
+.folderGroupHeader:hover {
+  color: var(--text-dim);
+}
+
+.folderGroupCount {
+  font-size: 10px;
+  color: var(--text-xdim);
+  margin-left: auto;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Sub-folder items (under the "Folders" group) get a small left indent */
+.folderItem.indented {
+  padding-left: 18px;
+}
+
+/* Account color dot before folder icon */
+.accountColorDot {
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* Account section at bottom */
+.accounts {
+  border-top: 1px solid var(--sidebar-border);
+  padding: 8px 6px;
+  flex-shrink: 0;
+}
+
+.accountItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-mid);
+  transition: background var(--transition);
+}
+.accountItem:hover {
+  background: var(--folder-hover);
+}
+
+.accountAvatar {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.accountEmail {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.addAccountBtn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+  transition: color var(--transition);
+}
+.addAccountBtn:hover {
+  color: var(--accent);
+}

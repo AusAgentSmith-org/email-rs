@@ -1,0 +1,493 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import styles from './MessageList.module.css';
+import { MessageRow } from './MessageRow';
+import { useAppStore } from '../../store';
+import { useApi, useSyncEvents } from '../../hooks/useApi';
+import { useContextMenu } from '../ContextMenu/ContextMenu';
+import type { ContextMenuItem } from '../ContextMenu/ContextMenu';
+import type { Message } from '../../types';
+import { conditionGroupToSearchUrl } from '../../utils/search';
+
+// ── Thread grouping ───────────────────────────────────────────────────────────
+
+interface ThreadGroup {
+  key: string;
+  latest: Message;
+  messages: Message[];
+}
+
+function groupByThread(messages: Message[]): ThreadGroup[] {
+  const map = new Map<string, Message[]>();
+  for (const msg of messages) {
+    const key = msg.threadId ?? msg.id;
+    const group = map.get(key);
+    if (group) group.push(msg);
+    else map.set(key, [msg]);
+  }
+  return Array.from(map.values()).map((msgs) => {
+    const sorted = [...msgs].sort((a, b) => {
+      const da = a.date ? new Date(a.date).getTime() : 0;
+      const db = b.date ? new Date(b.date).getTime() : 0;
+      return db - da;
+    });
+    return { key: msgs[0].threadId ?? msgs[0].id, latest: sorted[0], messages: sorted };
+  });
+}
+
+// ── Keyboard navigation ───────────────────────────────────────────────────────
+
+function useKeyboardNav(
+  messages: Message[] | undefined,
+  selectedId: string | null,
+  setSelected: (id: string | null) => void,
+) {
+  useEffect(() => {
+    if (!messages) return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key !== 'j' && e.key !== 'k') return;
+      const idx = selectedId ? messages.findIndex((m) => m.id === selectedId) : -1;
+      if (e.key === 'j') {
+        const next = messages[idx + 1];
+        if (next) setSelected(next.id);
+      } else {
+        const prev = messages[Math.max(0, idx - 1)];
+        if (prev) setSelected(prev.id);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [messages, selectedId, setSelected]);
+}
+
+// ── Bulk API helper ───────────────────────────────────────────────────────────
+
+type BulkAction = 'archive' | 'delete' | 'mark_read' | 'mark_unread';
+
+async function callBulkApi(ids: string[], action: BulkAction): Promise<void> {
+  await fetch('/api/v1/messages/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids, action }),
+  });
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export function MessageList() {
+  const {
+    selectedFolderId,
+    selectedMessageId,
+    setSelectedMessage,
+    folders,
+    searchQuery,
+    conditionGroup,
+    folderSelectSeq,
+    messages,
+    setMessages,
+    selectedMessageIds,
+    toggleMessageSelection,
+    selectAllMessages,
+    clearMessageSelection,
+  } = useAppStore();
+  const listRef = useRef<HTMLDivElement>(null);
+  const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0;
+    setExpandedThreads(new Set());
+  }, [folderSelectSeq]);
+
+  const isSmartFolder = !!selectedFolderId?.startsWith('smart:');
+  const smartKind = isSmartFolder ? selectedFolderId!.replace('smart:', '') : '';
+  const isSearching = !!searchQuery.trim();
+  const advancedSearchUrl = conditionGroup ? conditionGroupToSearchUrl(conditionGroup) : '';
+  const isAdvancedSearching = !!advancedSearchUrl;
+
+  const { data: folderMessages, loading: folderLoading, refetch } = useApi<Message[]>(
+    selectedFolderId && !searchQuery && !isSmartFolder && !isAdvancedSearching
+      ? `/api/v1/folders/${selectedFolderId}/messages`
+      : '',
+    { immediate: !!selectedFolderId && !searchQuery && !isSmartFolder && !isAdvancedSearching },
+  );
+
+  const { data: smartMessages, loading: smartLoading, refetch: refetchSmart } = useApi<Message[]>(
+    isSmartFolder && !searchQuery && !isAdvancedSearching ? `/api/v1/smart-folders/${smartKind}/messages` : '',
+    { immediate: isSmartFolder && !searchQuery && !isAdvancedSearching },
+  );
+
+  const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  const { data: searchResults, loading: searchLoading } = useApi<Message[]>(
+    debouncedQuery.trim() ? `/api/v1/search?q=${encodeURIComponent(debouncedQuery.trim())}` : '',
+    { immediate: !!debouncedQuery.trim() },
+  );
+
+  const { data: advancedResults, loading: advancedLoading } = useApi<Message[]>(
+    advancedSearchUrl,
+    { immediate: isAdvancedSearching },
+  );
+
+  const handleSync = useCallback(() => { refetch(); refetchSmart(); }, [refetch, refetchSmart]);
+  useSyncEvents(handleSync);
+
+  const fetchedMessages = isAdvancedSearching ? advancedResults
+    : isSearching ? searchResults
+    : isSmartFolder ? smartMessages
+    : folderMessages;
+  const loading = isAdvancedSearching ? advancedLoading
+    : isSearching ? searchLoading
+    : isSmartFolder ? smartLoading
+    : folderLoading;
+
+  // Sync fetched data into the store so mutations elsewhere can update it.
+  useEffect(() => {
+    if (fetchedMessages) setMessages(fetchedMessages);
+  }, [fetchedMessages, setMessages]);
+
+  useKeyboardNav(messages.length ? messages : undefined, selectedMessageId, setSelectedMessage);
+
+  // ── Extra keyboard shortcuts ─────────────────────────────────────────────
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      // Ctrl+A / Cmd+A — select all
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        selectAllMessages(messages.map((m) => m.id));
+        return;
+      }
+
+      // Escape — clear selection or deselect message
+      if (e.key === 'Escape') {
+        if (selectedMessageIds.length > 0) {
+          clearMessageSelection();
+        } else {
+          setSelectedMessage(null);
+        }
+        return;
+      }
+
+      if (!selectedMessageId) return;
+
+      // x — toggle selection on focused row
+      if (e.key === 'x') {
+        toggleMessageSelection(selectedMessageId);
+        return;
+      }
+
+      // e — archive focused message
+      if (e.key === 'e') {
+        fetch(`/api/v1/messages/${selectedMessageId}/archive`, { method: 'POST' }).then(() => {
+          setSelectedMessage(null);
+          refetch();
+        }).catch(() => undefined);
+        return;
+      }
+
+      // Delete / Backspace — trash focused message
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        fetch(`/api/v1/messages/${selectedMessageId}`, { method: 'DELETE' }).then(() => {
+          setSelectedMessage(null);
+          refetch();
+        }).catch(() => undefined);
+        return;
+      }
+
+      // u — toggle read
+      if (e.key === 'u') {
+        const msg = messages.find((m) => m.id === selectedMessageId);
+        if (msg) {
+          fetch(`/api/v1/messages/${selectedMessageId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isRead: !msg.isRead }),
+          }).then(() => refetch()).catch(() => undefined);
+        }
+        return;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [
+    messages,
+    selectedMessageId,
+    selectedMessageIds,
+    toggleMessageSelection,
+    selectAllMessages,
+    clearMessageSelection,
+    setSelectedMessage,
+    refetch,
+  ]);
+
+  // ── Bulk action handlers ─────────────────────────────────────────────────
+
+  const handleBulkAction = useCallback(async (action: BulkAction) => {
+    if (action === 'delete') {
+      if (!window.confirm(`Delete ${selectedMessageIds.length} message(s)?`)) return;
+    }
+    await callBulkApi(selectedMessageIds, action);
+    clearMessageSelection();
+    refetch();
+    refetchSmart();
+  }, [selectedMessageIds, clearMessageSelection, refetch, refetchSmart]);
+
+  // ── Context menu ─────────────────────────────────────────────────────────
+
+  const { contextMenu, openContextMenu } = useContextMenu();
+
+  const buildRowContextMenu = useCallback((msg: Message): ContextMenuItem[] => [
+    {
+      label: 'Open',
+      action: () => setSelectedMessage(msg.id),
+    },
+    {
+      label: 'Reply',
+      action: () => {
+        setSelectedMessage(msg.id);
+      },
+    },
+    {
+      label: 'Forward',
+      action: () => {
+        setSelectedMessage(msg.id);
+      },
+    },
+    { separator: true },
+    {
+      label: 'Archive',
+      action: () => {
+        fetch(`/api/v1/messages/${msg.id}/archive`, { method: 'POST' })
+          .then(() => { refetch(); refetchSmart(); })
+          .catch(() => undefined);
+      },
+    },
+    {
+      label: 'Move to Trash',
+      action: () => {
+        fetch(`/api/v1/messages/${msg.id}`, { method: 'DELETE' })
+          .then(() => { if (selectedMessageId === msg.id) setSelectedMessage(null); refetch(); refetchSmart(); })
+          .catch(() => undefined);
+      },
+    },
+    { separator: true },
+    {
+      label: 'Mark Read',
+      action: () => {
+        fetch(`/api/v1/messages/${msg.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isRead: true }),
+        }).then(() => { refetch(); refetchSmart(); }).catch(() => undefined);
+      },
+    },
+    {
+      label: 'Mark Unread',
+      action: () => {
+        fetch(`/api/v1/messages/${msg.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isRead: false }),
+        }).then(() => { refetch(); refetchSmart(); }).catch(() => undefined);
+      },
+    },
+    {
+      label: 'Flag',
+      action: () => {
+        fetch(`/api/v1/messages/${msg.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isFlagged: true }),
+        }).then(() => { refetch(); refetchSmart(); }).catch(() => undefined);
+      },
+    },
+    {
+      label: 'Unflag',
+      action: () => {
+        fetch(`/api/v1/messages/${msg.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isFlagged: false }),
+        }).then(() => { refetch(); refetchSmart(); }).catch(() => undefined);
+      },
+    },
+  ], [selectedMessageId, setSelectedMessage, refetch, refetchSmart]);
+
+  // ── Derived values ───────────────────────────────────────────────────────
+
+  const unreadCount = messages.filter((m) => !m.isRead).length;
+  const allSelected = messages.length > 0 && messages.every((m) => selectedMessageIds.includes(m.id));
+  const someSelected = selectedMessageIds.length > 0 && !allSelected;
+
+  const smartLabels: Record<string, string> = { all: 'All Inboxes', unread: 'Unread', flagged: 'Flagged', snoozed: 'Snoozed' };
+  const headerLabel = isAdvancedSearching
+    ? 'Advanced search results'
+    : isSearching
+      ? `Results for "${debouncedQuery}"`
+      : isSmartFolder
+        ? (smartLabels[smartKind] ?? smartKind)
+        : selectedFolderId
+          ? (folders.find((f) => f.id === selectedFolderId)?.name ?? 'Messages')
+          : 'Select a folder';
+
+  // Thread grouping only in folder view (not search / smart folders).
+  const useThreading = !isSearching && !isAdvancedSearching && !isSmartFolder && !!selectedFolderId;
+  const threadGroups = useThreading && messages.length ? groupByThread(messages) : null;
+
+  const toggleThread = (key: string) => {
+    setExpandedThreads((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────
+
+  return (
+    <div className={styles.messageList}>
+      {/* Bulk action bar */}
+      {selectedMessageIds.length > 0 ? (
+        <div className={styles.bulkBar}>
+          <input
+            type="checkbox"
+            className={styles.selectAllCheckbox}
+            checked={allSelected}
+            ref={(el) => { if (el) el.indeterminate = someSelected; }}
+            onChange={() => {
+              if (allSelected) clearMessageSelection();
+              else selectAllMessages(messages.map((m) => m.id));
+            }}
+            aria-label="Select all messages"
+          />
+          <span className={styles.bulkCount}>{selectedMessageIds.length} selected</span>
+          <div className={styles.bulkActions}>
+            <button type="button" className={styles.bulkBtn} onClick={() => handleBulkAction('archive')}>
+              Archive
+            </button>
+            <button type="button" className={styles.bulkBtn} onClick={() => handleBulkAction('mark_read')}>
+              Mark Read
+            </button>
+            <button type="button" className={styles.bulkBtn} onClick={() => handleBulkAction('mark_unread')}>
+              Mark Unread
+            </button>
+            <button type="button" className={`${styles.bulkBtn} ${styles.bulkBtnDanger}`} onClick={() => handleBulkAction('delete')}>
+              Delete
+            </button>
+          </div>
+          <button
+            type="button"
+            className={styles.bulkCancel}
+            onClick={clearMessageSelection}
+            aria-label="Cancel selection"
+          >
+            ×
+          </button>
+        </div>
+      ) : (
+        <div className={styles.header}>
+          <input
+            type="checkbox"
+            className={styles.selectAllCheckbox}
+            checked={allSelected}
+            ref={(el) => { if (el) el.indeterminate = someSelected; }}
+            onChange={() => {
+              if (allSelected) clearMessageSelection();
+              else selectAllMessages(messages.map((m) => m.id));
+            }}
+            aria-label="Select all messages"
+          />
+          <span className={styles.folderName}>{headerLabel}</span>
+          {!isSearching && unreadCount > 0 && (
+            <span className={styles.unreadBadge}>{unreadCount} unread</span>
+          )}
+          {isSearching && messages.length > 0 && (
+            <span className={styles.unreadBadge}>{messages.length}</span>
+          )}
+        </div>
+      )}
+
+      <div className={styles.list} ref={listRef}>
+        {!isSearching && !selectedFolderId && (
+          <div className={styles.empty}>No folder selected</div>
+        )}
+        {loading && <div className={styles.empty}>Loading…</div>}
+        {!loading && isSearching && debouncedQuery.trim() && messages.length === 0 && (
+          <div className={styles.empty}>No results for "{debouncedQuery}"</div>
+        )}
+        {!loading && !isSearching && selectedFolderId && messages.length === 0 && (
+          <div className={styles.empty}>No messages</div>
+        )}
+
+        {/* Thread view */}
+        {threadGroups?.map(({ key, latest, messages: threadMsgs }) => {
+          const isExpanded = expandedThreads.has(key);
+          const hasMany = threadMsgs.length > 1;
+          return (
+            <div key={key}>
+              <MessageRow
+                message={latest}
+                isSelected={latest.id === selectedMessageId}
+                isChecked={selectedMessageIds.includes(latest.id)}
+                threadCount={hasMany ? threadMsgs.length : undefined}
+                onClick={() => {
+                  setSelectedMessage(latest.id);
+                  if (hasMany && !isExpanded) toggleThread(key);
+                }}
+                onCheck={(e) => { e.stopPropagation(); toggleMessageSelection(latest.id); }}
+                onContextMenu={(e) => openContextMenu(e, buildRowContextMenu(latest))}
+              />
+              {hasMany && isExpanded && (
+                <>
+                  {threadMsgs.slice(1).map((msg) => (
+                    <MessageRow
+                      key={msg.id}
+                      message={msg}
+                      isSelected={msg.id === selectedMessageId}
+                      isChecked={selectedMessageIds.includes(msg.id)}
+                      indent
+                      onClick={() => setSelectedMessage(msg.id)}
+                      onCheck={(e) => { e.stopPropagation(); toggleMessageSelection(msg.id); }}
+                      onContextMenu={(e) => openContextMenu(e, buildRowContextMenu(msg))}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    className={styles.threadExpandBtn}
+                    onClick={() => toggleThread(key)}
+                  >
+                    ▲ Collapse thread
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Flat view (search / smart folders) */}
+        {!threadGroups && messages.map((message) => (
+          <MessageRow
+            key={message.id}
+            message={message}
+            isSelected={message.id === selectedMessageId}
+            isChecked={selectedMessageIds.includes(message.id)}
+            onClick={() => setSelectedMessage(message.id)}
+            onCheck={(e) => { e.stopPropagation(); toggleMessageSelection(message.id); }}
+            onContextMenu={(e) => openContextMenu(e, buildRowContextMenu(message))}
+          />
+        ))}
+      </div>
+
+      {contextMenu}
+    </div>
+  );
+}

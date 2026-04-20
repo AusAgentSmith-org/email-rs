@@ -1,0 +1,11 @@
+:8080 {
+	# Route API and OAuth callbacks to the backend
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+
+	# Everything else (including HMR websocket) goes to Vite dev server
+	handle {
+		reverse_proxy frontend:5173
+	}
+}

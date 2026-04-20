@@ -1,0 +1,97 @@
+/* ── Design tokens — light theme (default) ────────────────────────────────── */
+:root {
+  --bg:                  #f5f4f2;
+  --sidebar:             #eceae6;
+  --sidebar-border:      #dddbd7;
+  --list-bg:             #faf9f7;
+  --list-border:         #e2e0dc;
+  --read-bg:             #ffffff;
+  --chrome:              #e0dedd;
+  --text:                #1a1917;
+  --text-mid:            #5a5855;
+  --text-dim:            #908e8b;
+  --text-xdim:           #b8b6b3;
+  --row-hover:           #f0eeeb;
+  --row-selected:        #e8eef8;
+  --row-selected-border: oklch(70% 0.10 252);
+  --divider:             #e2e0dc;
+  --tag:                 #ede9e4;
+  --tag-text:            #6b6965;
+  --input-bg:            #ffffff;
+  --input-border:        #d0cec9;
+  --folder-active:       #dddbd7;
+  --folder-hover:        #e5e3df;
+  --accent:              oklch(52% 0.16 252);
+  --accent-hover:        oklch(46% 0.16 252);
+  --accent-bg:           oklch(95% 0.04 252);
+  --accent-text:         oklch(35% 0.14 252);
+  --snooze-color:        oklch(60% 0.14 50);
+  --scrollbar:           #ccc9c5;
+
+  --font-sans:   'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:   'JetBrains Mono', 'Fira Code', monospace;
+
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   10px;
+  --radius-full: 999px;
+
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md:   0 2px 8px rgba(0, 0, 0, 0.10);
+
+  --transition:  150ms ease;
+}
+
+/* ── Dark theme ───────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:                  #1c1b19;
+  --sidebar:             #242220;
+  --sidebar-border:      #302e2b;
+  --list-bg:             #201f1d;
+  --list-border:         #2c2a27;
+  --read-bg:             #252321;
+  --chrome:              #2a2826;
+  --text:                #e8e6e3;
+  --text-mid:            #a8a5a1;
+  --text-dim:            #6e6c68;
+  --text-xdim:           #4a4845;
+  --row-hover:           #2a2826;
+  --row-selected:        #1e2535;
+  --row-selected-border: oklch(55% 0.10 252);
+  --divider:             #2c2a27;
+  --tag:                 #2e2c29;
+  --tag-text:            #908e8b;
+  --input-bg:            #2a2826;
+  --input-border:        #3a3835;
+  --folder-active:       #302e2b;
+  --folder-hover:        #2a2826;
+  --accent:              oklch(62% 0.16 252);
+  --accent-hover:        oklch(68% 0.16 252);
+  --accent-bg:           oklch(22% 0.06 252);
+  --accent-text:         oklch(75% 0.14 252);
+  --snooze-color:        oklch(65% 0.14 50);
+  --scrollbar:           #3a3835;
+}
+
+/* ── Density ──────────────────────────────────────────────────────────────── */
+:root,
+[data-density="cozy"] {
+  --row-height:       56px;
+  --row-padding-v:    10px;
+  --row-padding-h:    16px;
+  --sidebar-item-h:   32px;
+}
+
+[data-density="compact"] {
+  --row-height:       36px;
+  --row-padding-v:    6px;
+  --row-padding-h:    12px;
+  --sidebar-item-h:   26px;
+}
+
+[data-density="comfy"] {
+  --row-height:       72px;
+  --row-padding-v:    14px;
+  --row-padding-h:    20px;
+  --sidebar-item-h:   38px;
+}
