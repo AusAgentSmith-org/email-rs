@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { MessageList } from './components/MessageList/MessageList';
 import { ReadingPane } from './components/ReadingPane/ReadingPane';
-import { Toolbar } from './components/Toolbar/Toolbar';
 import { AccountSetup } from './components/AccountSetup/AccountSetup';
 import { ComposeModal } from './components/Compose/ComposeModal';
 import { SettingsModal } from './components/Settings/SettingsModal';
@@ -106,9 +105,7 @@ export function App() {
   if (accounts.length === 0) return <AccountSetup onAccountAdded={fetchAccounts} />;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-      <Toolbar />
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
         <div style={{ width: sidebar.width, flexShrink: 0, overflow: 'hidden', height: '100%' }}>
           <Sidebar onAccountAdded={fetchAccounts} />
         </div>
@@ -134,7 +131,6 @@ export function App() {
         <div style={{ flex: 1, overflow: 'hidden', height: '100%', minWidth: 0 }}>
           {compose ? <ComposeModal /> : <ReadingPane />}
         </div>
-      </div>
 
       {settingsOpen && <SettingsModal onAccountDeleted={fetchAccounts} />}
       <CommandPalette />

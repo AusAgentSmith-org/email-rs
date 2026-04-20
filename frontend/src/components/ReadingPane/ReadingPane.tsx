@@ -37,57 +37,63 @@ function formatFullDate(dateStr: string | null): string {
   });
 }
 
+const RP = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+
 function ReplyIcon() {
   return (
-    <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M2 6H9a3 3 0 010 6H7M2 6l3-3M2 6l3 3" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 14 14" {...RP}>
+      <path d="M2 7h7.5a3 3 0 010 6H8" />
+      <path d="M2 7l3.5-3.5M2 7l3.5 3.5" />
     </svg>
   );
 }
 
 function ForwardIcon() {
   return (
-    <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M11 6H4a3 3 0 000 6h2M11 6L8 3M11 6L8 9" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 14 14" {...RP}>
+      <path d="M12 7H4.5a3 3 0 000 6H6" />
+      <path d="M12 7L8.5 3.5M12 7L8.5 10.5" />
     </svg>
   );
 }
 
 function AttachIcon() {
   return (
-    <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M2.5 5.5L6.5 1.5a2.12 2.12 0 013 3L4 10a1.06 1.06 0 01-1.5-1.5L7 4" strokeLinecap="round" />
+    <svg viewBox="0 0 14 14" {...RP}>
+      <path d="M2.5 6.5L6.5 2.5a2.5 2.5 0 013.5 3.5L4.5 11a1.2 1.2 0 01-1.7-1.7L8 4" />
     </svg>
   );
 }
 
 function ArchiveIcon() {
   return (
-    <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <rect x="1" y="1.5" width="11" height="2.5" rx="0.8" />
-      <path d="M1.5 4v7a1 1 0 001 1h8a1 1 0 001-1V4" />
-      <path d="M5 7.5h3" strokeLinecap="round" />
+    <svg viewBox="0 0 14 14" {...RP}>
+      <rect x="1" y="1.5" width="12" height="3" rx="1" />
+      <path d="M1.5 4.5v7a1 1 0 001 1h9a1 1 0 001-1v-7" />
+      <path d="M5.5 8h3" />
     </svg>
   );
 }
 
 function TrashIcon() {
   return (
-    <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M1.5 3.5h10M5 3.5V2.5a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v1M4 3.5v7a1 1 0 001 1h3a1 1 0 001-1v-7" strokeLinecap="round" />
+    <svg viewBox="0 0 14 14" {...RP}>
+      <path d="M1.5 4h11" />
+      <path d="M5.5 4V3a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v1" />
+      <path d="M3 4l.7 8a1 1 0 001 .9h5.6a1 1 0 001-.9L12 4" />
     </svg>
   );
 }
 
 function ReadIcon({ isRead }: { isRead: boolean }) {
   return isRead ? (
-    <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M1 6.5l3.5 3.5 7-7" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 14 14" {...RP}>
+      <path d="M1.5 7.5l3.5 3.5 7.5-7.5" />
     </svg>
   ) : (
-    <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <circle cx="10" cy="3.5" r="1.5" fill="var(--accent)" stroke="none" />
-      <path d="M1 3h8M1 6.5h10M1 10h10" strokeLinecap="round" />
+    <svg viewBox="0 0 14 14" {...RP}>
+      <circle cx="11" cy="4" r="2" fill="var(--accent)" stroke="none" />
+      <path d="M1.5 4.5h8M1.5 7.5h11M1.5 10.5h11" />
     </svg>
   );
 }

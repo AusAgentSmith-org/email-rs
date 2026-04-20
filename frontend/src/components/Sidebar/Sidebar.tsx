@@ -9,37 +9,41 @@ import type { Account, Folder, Suggestion } from '../../types';
 
 // ── SVG icons ────────────────────────────────────────────────────────────────
 
+const IC = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+
 function InboxIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <rect x="1" y="3" width="14" height="10" rx="2" />
-      <path d="M1 9h4l1.5 2h3L11 9h4" />
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <rect x="1.5" y="3" width="13" height="10" rx="1.5" />
+      <path d="M1.5 9.5h3.8l1.7 2.5h3l1.7-2.5h3.8" />
     </svg>
   );
 }
 
 function SentIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M14 2L2 7l5 2 2 5 5-12z" />
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <path d="M13.5 2.5L2 7l5 2 1.5 4.5 5-11z" />
+      <path d="M7 9l3-2.5" />
     </svg>
   );
 }
 
 function DraftIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M11 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V5l-3-3z" />
-      <path d="M11 2v3h3M5 9h6M5 12h4" />
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <path d="M10.5 2H4a1.5 1.5 0 00-1.5 1.5v9A1.5 1.5 0 004 14h8a1.5 1.5 0 001.5-1.5V6L10.5 2z" />
+      <path d="M10.5 2v4H14" />
+      <path d="M5 9.5h6M5 12h3.5" />
     </svg>
   );
 }
 
 function ArchiveIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <rect x="1" y="2" width="14" height="3" rx="1" />
-      <path d="M2 5v8a1 1 0 001 1h10a1 1 0 001-1V5" />
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <rect x="1.5" y="2" width="13" height="3" rx="1" />
+      <path d="M2.5 5v7.5a1 1 0 001 1h9a1 1 0 001-1V5" />
       <path d="M6 9h4" />
     </svg>
   );
@@ -47,25 +51,27 @@ function ArchiveIcon({ className }: { className?: string }) {
 
 function TrashIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M2 4h12M6 4V3a1 1 0 011-1h2a1 1 0 011 1v1M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4" />
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <path d="M2.5 4.5h11" />
+      <path d="M5.5 4.5v-1a.5.5 0 01.5-.5h3a.5.5 0 01.5.5v1" />
+      <path d="M3.5 4.5l.7 8.5a1 1 0 001 .9h5.6a1 1 0 001-.9l.7-8.5" />
     </svg>
   );
 }
 
 function SpamIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <circle cx="8" cy="8" r="6" />
-      <path d="M8 5v3M8 10.5v.5" strokeLinecap="round" />
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <path d="M5.5 1.5h5l4 4v5l-4 4h-5l-4-4v-5l4-4z" />
+      <path d="M8 5.5v3M8 10v.5" />
     </svg>
   );
 }
 
 function FolderIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M1 4a1 1 0 011-1h4l2 2h6a1 1 0 011 1v6a1 1 0 01-1 1H2a1 1 0 01-1-1V4z" />
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <path d="M1.5 4.5a1 1 0 011-1h3.6l1.8 2H13a1 1 0 011 1v5.5a1 1 0 01-1 1H2.5a1 1 0 01-1-1V4.5z" />
     </svg>
   );
 }
@@ -77,28 +83,74 @@ function ChevronIcon({ collapsed }: { collapsed: boolean }) {
       fill="none"
       stroke="currentColor"
       strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       width="10"
       height="10"
       style={{ transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', flexShrink: 0 }}
     >
-      <path d="M2 3.5l3 3 3-3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 3.5l3 3 3-3" />
     </svg>
   );
 }
 
 function SearchIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
       <circle cx="7" cy="7" r="4.5" />
-      <path d="M10.5 10.5L14 14" strokeLinecap="round" />
+      <path d="M10.5 10.5L14 14" />
     </svg>
   );
 }
 
 function TuneIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M2 4h12M4 8h8M6 12h4" strokeLinecap="round" />
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <path d="M1.5 4h13M4 8h8M6.5 12h3" />
+    </svg>
+  );
+}
+
+function ComposeIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+      <path d="M11 2.5l2.5 2.5-7.5 7.5H3.5v-2.5L11 2.5z" />
+    </svg>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" width="14" height="14">
+      <circle cx="8" cy="8" r="2.5" />
+      <path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.3 3.3l1 1M11.7 11.7l1 1M3.3 12.7l1-1M11.7 4.3l1-1" />
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" width="14" height="14">
+      <circle cx="8" cy="8" r="3" />
+      <path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.5 3.5l1 1M11.5 11.5l1 1M3.5 12.5l1-1M11.5 4.5l1-1" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+      <path d="M12.5 10.5A5.5 5.5 0 016 3a5.5 5.5 0 100 11 5.5 5.5 0 006.5-3.5z" />
+    </svg>
+  );
+}
+
+function DensityIcon({ value }: { value: 'compact' | 'cozy' | 'comfy' }) {
+  return (
+    <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" width="13" height="13">
+      {value === 'compact' && <><path d="M2 3h10M2 6h10M2 9h10M2 12h10" /></>}
+      {value === 'cozy'    && <><path d="M2 3.5h10M2 7h10M2 10.5h10" /></>}
+      {value === 'comfy'   && <><path d="M2 4h10M2 10h10" /></>}
     </svg>
   );
 }
@@ -106,39 +158,40 @@ function TuneIcon({ className }: { className?: string }) {
 // Smart folder icons
 function AllInboxIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <rect x="1" y="5" width="14" height="8" rx="1.5" />
-      <path d="M1 11h3.5l1 1.5h3L9.5 11H13" />
-      <path d="M4 5V4a1 1 0 011-1h6a1 1 0 011 1v1" />
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <rect x="1.5" y="4.5" width="13" height="9" rx="1.5" />
+      <path d="M1.5 10.5h3.5l1.5 2h3l1.5-2h3.5" />
+      <path d="M4.5 4.5V3.5a1 1 0 011-1h5a1 1 0 011 1v1" />
     </svg>
   );
 }
 
 function UnreadIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <circle cx="11" cy="5" r="2.5" fill="var(--accent)" stroke="none" />
-      <rect x="1" y="3" width="14" height="10" rx="2" />
-      <path d="M1 9h4l1.5 2h3L11 9h4" />
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <circle cx="11.5" cy="4.5" r="2.5" fill="var(--accent)" stroke="none" />
+      <rect x="1.5" y="3" width="13" height="10" rx="1.5" />
+      <path d="M1.5 9.5h3.8l1.7 2.5h3l1.7-2.5h3.8" />
     </svg>
   );
 }
 
 function FlaggedIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M3 2v12" strokeLinecap="round" />
-      <path d="M3 2l9 3-9 4" strokeLinejoin="round" />
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <path d="M3.5 2v12" />
+      <path d="M3.5 2H12l-2.5 4L12 10H3.5" />
     </svg>
   );
 }
 
 function SnoozedIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <circle cx="8" cy="8.5" r="5.5" />
-      <path d="M8 5.5v3l2 1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M6 2h4M7 2l2-1.5" strokeLinecap="round" />
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <circle cx="8" cy="9" r="5" />
+      <path d="M8 6v3l2 1.5" />
+      <path d="M5.5 2.5h5" />
+      <path d="M6 3L8 1.5 10 3" />
     </svg>
   );
 }
@@ -261,7 +314,7 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const { selectedFolderId, setSelectedFolder, setFolders, openCompose, searchQuery, setSearchQuery, conditionGroup, navigateToMessage, advancedSearchOpen, openAdvancedSearch, closeAdvancedSearch } = useAppStore();
+  const { selectedFolderId, setSelectedFolder, setFolders, openCompose, searchQuery, setSearchQuery, conditionGroup, navigateToMessage, advancedSearchOpen, openAdvancedSearch, closeAdvancedSearch, theme, density, setTheme, setDensity, openSettings } = useAppStore();
   const navRef = useRef<HTMLElement>(null);
   const { contextMenu, openContextMenu } = useContextMenu();
 
@@ -357,6 +410,7 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
           if (accountId) openCompose({ accountId, to: '', subject: '', mode: 'compose' });
         }}
       >
+        <ComposeIcon />
         Compose
       </button>
 
@@ -580,27 +634,55 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
       </nav>
 
       <div className={styles.accounts}>
-        <button
-          className={styles.addAccountBtn}
-          type="button"
-          onClick={() => setShowAddModal(true)}
-        >
-          ＋ Add account
-        </button>
         {accounts?.map((account) => {
           const avatar = getAvatarStyle(account.name);
           return (
             <div key={account.id} className={styles.accountItem}>
-              <div
-                className={styles.accountAvatar}
-                style={{ background: avatar.bg }}
-              >
+              <div className={styles.accountAvatar} style={{ background: avatar.bg }}>
                 {avatar.initials}
               </div>
               <span className={styles.accountEmail}>{account.email}</span>
             </div>
           );
         })}
+        <button className={styles.addAccountBtn} type="button" onClick={() => setShowAddModal(true)}>
+          + Add account
+        </button>
+      </div>
+
+      <div className={styles.footer}>
+        <div className={styles.densityGroup} role="group" aria-label="Message density">
+          {(['compact', 'cozy', 'comfy'] as const).map((d) => (
+            <button
+              key={d}
+              type="button"
+              title={d.charAt(0).toUpperCase() + d.slice(1)}
+              className={`${styles.densityBtn}${density === d ? ` ${styles.densityActive}` : ''}`}
+              onClick={() => setDensity(d)}
+              aria-pressed={density === d}
+            >
+              <DensityIcon value={d} />
+            </button>
+          ))}
+        </div>
+        <div className={styles.footerRight}>
+          <button
+            type="button"
+            className={styles.footerBtn}
+            title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+          >
+            {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+          </button>
+          <button
+            type="button"
+            className={styles.footerBtn}
+            title="Settings"
+            onClick={openSettings}
+          >
+            <GearIcon />
+          </button>
+        </div>
       </div>
 
       {showAddModal && (

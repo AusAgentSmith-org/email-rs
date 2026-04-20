@@ -30,16 +30,16 @@ function formatTimestamp(dateStr: string | null): string {
 
 function AttachmentIcon() {
   return (
-    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M2.5 5.5L6.5 1.5a2.12 2.12 0 013 3L4 10a1.06 1.06 0 01-1.5-1.5L7 4" strokeLinecap="round" />
+    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 5.5L5.5 2a2 2 0 012.8 2.8L3.5 9.5a1 1 0 001.5 1.5L9.5 6.5" />
     </svg>
   );
 }
 
 function FlagIcon() {
   return (
-    <svg viewBox="0 0 12 12" fill="currentColor">
-      <path d="M2 1v10M2 1l7 2.5L2 6" />
+    <svg viewBox="0 0 12 12" fill="currentColor" stroke="currentColor" strokeWidth="0.5" strokeLinejoin="round">
+      <path d="M2 1.5v9M2 1.5l8 2.5-8 3.5" />
     </svg>
   );
 }
