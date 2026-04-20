@@ -33,17 +33,17 @@ steps:
         fi
 
         EXISTING_ID=$(curl -sf -H "Authorization: token $FORGEJO_TOKEN" \
-          "https://repo.sprooty.com/api/v1/repos/$CI_REPO/releases/tags/$TAG" \
+          "https://repo.indexarr.net/api/v1/repos/$CI_REPO/releases/tags/$TAG" \
           | jq -r '.id // empty' || true)
         [ -n "$EXISTING_ID" ] && curl -sf -X DELETE -H "Authorization: token $FORGEJO_TOKEN" \
-          "https://repo.sprooty.com/api/v1/repos/$CI_REPO/releases/$EXISTING_ID" || true
+          "https://repo.indexarr.net/api/v1/repos/$CI_REPO/releases/$EXISTING_ID" || true
         [ "$TAG" = "latest" ] && curl -sf -X DELETE -H "Authorization: token $FORGEJO_TOKEN" \
-          "https://repo.sprooty.com/api/v1/repos/$CI_REPO/tags/latest" || true
+          "https://repo.indexarr.net/api/v1/repos/$CI_REPO/tags/latest" || true
 
         curl -sf -X POST \
           -H "Authorization: token $FORGEJO_TOKEN" \
           -H "Content-Type: application/json" \
-          "https://repo.sprooty.com/api/v1/repos/$CI_REPO/releases" \
+          "https://repo.indexarr.net/api/v1/repos/$CI_REPO/releases" \
           -d "{\"tag_name\":\"$TAG\",\"target_commitish\":\"$CI_COMMIT_SHA\",\"name\":\"$TITLE\",\"body\":\"$BODY\",\"draft\":false,\"prerelease\":$PRERELEASE}"
         echo "Release $TAG created."
 
@@ -98,13 +98,13 @@ steps:
       - |
         TAG="${CI_COMMIT_TAG:-latest}"
         REL_ID=$(curl -sf -H "Authorization: token $FORGEJO_TOKEN" \
-          "https://repo.sprooty.com/api/v1/repos/$CI_REPO/releases/tags/$TAG" \
+          "https://repo.indexarr.net/api/v1/repos/$CI_REPO/releases/tags/$TAG" \
           | jq -r '.id')
         find . -maxdepth 1 -name 'email-rs-*-installer.exe' | while read f; do
           echo "Uploading $(basename "$f")"
           curl -sf -X POST -H "Authorization: token $FORGEJO_TOKEN" \
             -F "attachment=@$f" \
-            "https://repo.sprooty.com/api/v1/repos/$CI_REPO/releases/$REL_ID/assets?name=$(basename "$f")"
+            "https://repo.indexarr.net/api/v1/repos/$CI_REPO/releases/$REL_ID/assets?name=$(basename "$f")"
         done
 
   # ── Notifications ─────────────────────────────────────────────────────────
