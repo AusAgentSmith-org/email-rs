@@ -80,11 +80,11 @@ steps:
       - sed -i '/^\[patch\]/,/^$/d' Cargo.toml || true
       - sed -i '/^\[patch\]/,/^$/d' crates/email-server/Cargo.toml || true
 
-      # Install WiX v5 + required extensions
-      - dotnet tool install --global wix
+      # Install WiX v5 (last free version — v6+ requires OSMF fee; v5 supports Linux)
+      - dotnet tool install --global wix --version 5.0.2
       - export PATH="$PATH:$HOME/.dotnet/tools"
-      - wix extension add WixToolset.UI.wixext
-      - wix extension add WixToolset.Util.wixext
+      - wix extension add WixToolset.UI.wixext/5.0.2
+      - wix extension add WixToolset.Util.wixext/5.0.2
 
       # Build React frontend
       - cd frontend && npm ci && npx vite build --outDir /tmp/email-rs-static --emptyOutDir && cd ..
