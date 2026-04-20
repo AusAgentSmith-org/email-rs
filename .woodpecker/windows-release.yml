@@ -14,7 +14,7 @@ when:
   - event: manual
 
 variables:
-  - &rust_image 'rust:1.82-bookworm'
+  - &rust_image 'rust:1.88-bookworm'
 
 steps:
   # ── Create Forgejo release before builds start uploading ─────────────────
