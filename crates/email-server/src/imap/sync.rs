@@ -52,12 +52,6 @@ struct FolderRecord {
     is_excluded: bool,
 }
 
-#[derive(sqlx::FromRow)]
-struct UncachedRow {
-    id: String,
-    uid: i64,
-}
-
 // ── ImapSyncEngine ────────────────────────────────────────────────────────────
 
 impl ImapSyncEngine {
@@ -444,57 +438,6 @@ async fn sync_folder<P: MailProvider>(
     .bind(&db_folder.id)
     .execute(&pool)
     .await?;
-
-    // Prefetch bodies for all messages that aren't cached yet (newest first).
-    // One IMAP connection for the whole batch avoids a TLS+auth roundtrip per click.
-    let uncached: Vec<UncachedRow> = sqlx::query_as(
-        r#"SELECT m.id, m.uid FROM messages m
-           LEFT JOIN message_bodies mb ON mb.message_id = m.id
-           WHERE m.folder_id = ? AND mb.message_id IS NULL
-           ORDER BY m.uid DESC"#,
-    )
-    .bind(&db_folder.id)
-    .fetch_all(&pool)
-    .await
-    .unwrap_or_default();
-
-    if !uncached.is_empty() {
-        let uids: Vec<u32> = uncached.iter().map(|m| m.uid as u32).collect();
-        let uid_to_db_id: std::collections::HashMap<u32, &str> = uncached
-            .iter()
-            .map(|m| (m.uid as u32, m.id.as_str()))
-            .collect();
-
-        match provider
-            .fetch_bodies_batch(&db_folder.full_path, &uids)
-            .await
-        {
-            Ok(bodies) => {
-                let count = bodies.len();
-                let mut tx = pool.begin().await?;
-                for (uid, body) in &bodies {
-                    if let Some(db_id) = uid_to_db_id.get(uid) {
-                        sqlx::query(
-                            r#"INSERT OR IGNORE INTO message_bodies
-                               (message_id, html_body, text_body, raw_headers)
-                               VALUES (?, ?, ?, ?)"#,
-                        )
-                        .bind(db_id)
-                        .bind(&body.html_body)
-                        .bind(&body.text_body)
-                        .bind(&body.raw_headers)
-                        .execute(&mut *tx)
-                        .await?;
-                    }
-                }
-                tx.commit().await?;
-                info!("pre-fetched {} bodies for {}", count, db_folder.full_path);
-            }
-            Err(e) => {
-                warn!("body prefetch failed for {}: {}", db_folder.full_path, e);
-            }
-        }
-    }
 
     Ok(())
 }
