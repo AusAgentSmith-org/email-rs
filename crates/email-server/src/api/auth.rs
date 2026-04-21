@@ -79,8 +79,8 @@ fn not_configured() -> Response {
 // ── Microsoft helpers ─────────────────────────────────────────────────────────
 
 fn get_microsoft_oauth_config() -> Option<(String, String)> {
-    let client_id = std::env::var("MICROSOFT_CLIENT_ID").ok()?;
-    let client_secret = std::env::var("MICROSOFT_CLIENT_SECRET").ok()?;
+    let client_id = crate::auth::microsoft_client_id()?;
+    let client_secret = crate::auth::microsoft_client_secret()?;
     Some((client_id, client_secret))
 }
 

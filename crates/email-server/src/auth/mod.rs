@@ -19,6 +19,18 @@ pub fn google_client_secret() -> Option<String> {
         .or_else(|| std::env::var("GOOGLE_CLIENT_SECRET").ok())
 }
 
+pub fn microsoft_client_id() -> Option<String> {
+    option_env!("MICROSOFT_CLIENT_ID")
+        .map(str::to_string)
+        .or_else(|| std::env::var("MICROSOFT_CLIENT_ID").ok())
+}
+
+pub fn microsoft_client_secret() -> Option<String> {
+    option_env!("MICROSOFT_CLIENT_SECRET")
+        .map(str::to_string)
+        .or_else(|| std::env::var("MICROSOFT_CLIENT_SECRET").ok())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AuthConfig {
