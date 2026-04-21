@@ -3,7 +3,8 @@
   email-rs Windows MSI installer (WiX v5)
 
   Build:
-    wix build -d AppVersion=<ver> -d StagingDir=<path> -arch x64 \
+    wix build -ext WixToolset.UI.wixext/5.0.2 \
+      -d AppVersion=<ver> -d StagingDir=<path> -arch x64 \
       installer.wxs -o email-rs-<ver>-installer.msi
 
   Silent install:    msiexec /i email-rs-<ver>-installer.msi /qn
@@ -11,7 +12,8 @@
 
   UpgradeCode MUST remain stable across versions — changing it breaks upgrades.
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
   <Package Name="email-rs"
            Manufacturer="sprooty"
@@ -22,6 +24,10 @@
     <SummaryInformation Description="email-rs self-hosted email and calendar client"/>
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed."/>
     <MediaTemplate EmbedCab="yes"/>
+
+    <!-- WixUI_Minimal: shows install progress and a finish page -->
+    <ui:WixUI Id="WixUI_Minimal"/>
+    <WixVariable Id="WixUILicenseRtf" Value="license.rtf"/>
 
     <!-- Directory layout -->
     <StandardDirectory Id="ProgramFiles64Folder">
@@ -43,7 +49,7 @@
     <!-- Server binary -->
     <ComponentGroup Id="Server">
       <Component Directory="INSTALLFOLDER" Id="EmailServerExe">
-        <File Source="$(var.StagingDir)\email-server.exe" KeyPath="yes"/>
+        <File Id="EmailServerExeFile" Source="$(var.StagingDir)\email-server.exe" KeyPath="yes"/>
       </Component>
     </ComponentGroup>
 
@@ -60,6 +66,17 @@
                        Type="string" Value="1" KeyPath="yes"/>
       </Component>
     </ComponentGroup>
+
+    <!-- Launch the tray app after install/upgrade (not uninstall) -->
+    <CustomAction Id="LaunchApp"
+                  FileRef="EmailServerExeFile"
+                  ExeCommand=""
+                  Return="asyncNoWait"
+                  Impersonate="yes"/>
+
+    <InstallExecuteSequence>
+      <Custom Action="LaunchApp" After="InstallFinalize">NOT REMOVE~="ALL"</Custom>
+    </InstallExecuteSequence>
 
   </Package>
 </Wix>

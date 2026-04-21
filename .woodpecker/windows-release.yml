@@ -97,6 +97,7 @@ steps:
 
         # WiX build
         wix build `
+          -ext WixToolset.UI.wixext/5.0.2 `
           -d "AppVersion=$version" `
           -d "StagingDir=$((Get-Location).Path)\staging" `
           -arch x64 `
