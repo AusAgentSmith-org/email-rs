@@ -149,6 +149,27 @@ Dev stack: `docker compose up --build` — Caddy proxy on :8585, backend (`cargo
 
 ---
 
+## Windows Distribution
+
+MSI installer built and shipped via Woodpecker CI (`loungeroomwinOrg` agent, Windows native).
+
+| Thing | Status |
+|-------|--------|
+| Rust binary (MSVC target) | Done — release build, `windows_subsystem = "windows"` |
+| System tray (winit 0.30 + tray-icon 0.19) | Done — icon, Open/Quit menu, left-click opens browser |
+| MSI installer (WiX v5.0.2) | Done — WixUI_Minimal finish dialog, auto-launches tray after install |
+| Error log | `%TEMP%\email-rs.log` — panic hook + explicit error paths write here |
+| CI pipeline | `.woodpecker/windows-release.yml` — triggers on tag or manual |
+
+**Known behaviour:**
+- `LaunchApp` custom action fires after `InstallFinalize` with `Impersonate="yes"` — tray should appear immediately after install. If elevated UAC context prevents it, use the Start Menu shortcut.
+- App does **not** add itself to startup — launch from Start Menu or add `email-server.exe` to `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` manually if wanted.
+
+**Bugs fixed (2026-04-21):**
+- `db/mod.rs` wasn't stripping the bare `sqlite:` prefix before `create_dir_all` — the `C:` drive letter made the path invalid on Windows (os error 123). Fixed by adding `.or_else(|| url.strip_prefix("sqlite:"))` to the prefix chain.
+
+---
+
 ## What's Not Built Yet
 
 - Rules / filters engine (conditions model done, execution not started)
@@ -158,8 +179,7 @@ Dev stack: `docker compose up --build` — Caddy proxy on :8585, backend (`cargo
 - Compose send (UI exists, API stub)
 - Snooze
 - Labels / tags
-- CI pipeline
-- Deployment (Komodo stack)
+- Linux/macOS deployment (Komodo stack)
 - Mobile-responsive layout
 
 ---
