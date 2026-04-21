@@ -219,28 +219,28 @@ export function AccountSetup({ onAccountAdded }: AccountSetupProps) {
   const [gmailLoading, setGmailLoading] = useState(false);
   const [msLoading, setMsLoading] = useState(false);
   const [showManual, setShowManual] = useState(false);
+  const [oauthError, setOauthError] = useState<string | null>(null);
 
-  const handleConnectGmail = async () => {
-    setGmailLoading(true);
+  const startOAuth = async (path: string, done: (loading: boolean) => void) => {
+    done(true);
+    setOauthError(null);
     try {
-      const res = await fetch('/api/v1/auth/gmail/authorize');
-      const data = (await res.json()) as { url: string };
+      const res = await fetch(path);
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        setOauthError(data.error ?? `OAuth not available (HTTP ${res.status})`);
+        done(false);
+        return;
+      }
       window.location.href = data.url;
-    } catch {
-      setGmailLoading(false);
+    } catch (e) {
+      setOauthError(e instanceof Error ? e.message : 'Network error');
+      done(false);
     }
   };
 
-  const handleConnectMicrosoft = async () => {
-    setMsLoading(true);
-    try {
-      const res = await fetch('/api/v1/auth/microsoft/authorize');
-      const data = (await res.json()) as { url: string };
-      window.location.href = data.url;
-    } catch {
-      setMsLoading(false);
-    }
-  };
+  const handleConnectGmail = () => startOAuth('/api/v1/auth/gmail/authorize', setGmailLoading);
+  const handleConnectMicrosoft = () => startOAuth('/api/v1/auth/microsoft/authorize', setMsLoading);
 
   return (
     <div className={styles.wrap}>
@@ -267,6 +267,8 @@ export function AccountSetup({ onAccountAdded }: AccountSetupProps) {
           {msLoading ? <span className={styles.spinner} /> : <MicrosoftIcon />}
           {msLoading ? 'Connecting…' : 'Connect Microsoft 365'}
         </button>
+
+        {oauthError && <p className={styles.errorMsg}>{oauthError}</p>}
 
         {!showManual && (
           <button

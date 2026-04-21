@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
     Json,
 };
@@ -54,9 +54,18 @@ fn get_oauth_config() -> Option<(String, String)> {
     Some((client_id, client_secret))
 }
 
-fn redirect_uri() -> String {
-    std::env::var("GOOGLE_REDIRECT_URI")
-        .unwrap_or_else(|_| "http://localhost:3000/api/v1/auth/gmail/callback".to_string())
+/// Resolve the OAuth callback URL. Env var wins if set (production deployments
+/// behind a reverse proxy need to pin this). Otherwise derive from the request's
+/// Host header so it works for both the docker dev stack (:3000) and the
+/// desktop build (:8585) without extra configuration.
+fn redirect_uri(headers: &HeaderMap) -> String {
+    if let Ok(v) = std::env::var("GOOGLE_REDIRECT_URI") {
+        return v;
+    }
+    format!(
+        "{}/api/v1/auth/gmail/callback",
+        request_origin(headers).unwrap_or_else(|| "http://localhost:3000".into())
+    )
 }
 
 fn not_configured() -> Response {
@@ -77,9 +86,26 @@ fn get_microsoft_oauth_config() -> Option<(String, String)> {
     Some((client_id, client_secret))
 }
 
-fn microsoft_redirect_uri() -> String {
-    std::env::var("MICROSOFT_REDIRECT_URI")
-        .unwrap_or_else(|_| "http://localhost:3000/api/v1/auth/microsoft/callback".to_string())
+fn microsoft_redirect_uri(headers: &HeaderMap) -> String {
+    if let Ok(v) = std::env::var("MICROSOFT_REDIRECT_URI") {
+        return v;
+    }
+    format!(
+        "{}/api/v1/auth/microsoft/callback",
+        request_origin(headers).unwrap_or_else(|| "http://localhost:3000".into())
+    )
+}
+
+/// Build `scheme://host` from the request. Trusts `X-Forwarded-Proto` when
+/// present (reverse proxy). Falls back to `http` since the desktop/dev server
+/// isn't TLS-terminated.
+fn request_origin(headers: &HeaderMap) -> Option<String> {
+    let host = headers.get(axum::http::header::HOST)?.to_str().ok()?;
+    let scheme = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("http");
+    Some(format!("{scheme}://{host}"))
 }
 
 fn microsoft_not_configured() -> Response {
@@ -141,13 +167,16 @@ async fn fetch_userinfo(access_token: &str) -> Result<GoogleUserInfo> {
 
 /// GET /api/v1/auth/gmail/authorize
 /// Returns a JSON body with the Google authorization URL.
-pub async fn gmail_authorize(State(state): State<Arc<AppState>>) -> Response {
+pub async fn gmail_authorize(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Response {
     let (client_id, client_secret) = match get_oauth_config() {
         Some(c) => c,
         None => return not_configured(),
     };
 
-    let oauth = OAuthConfig::gmail(client_id, client_secret, redirect_uri());
+    let oauth = OAuthConfig::gmail(client_id, client_secret, redirect_uri(&headers));
     let state_val = Uuid::new_v4().to_string();
 
     // Store the pending state.
@@ -163,6 +192,7 @@ pub async fn gmail_authorize(State(state): State<Arc<AppState>>) -> Response {
 /// GET /api/v1/auth/gmail/callback?code=...&state=...
 pub async fn gmail_callback(
     State(app_state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Query(q): Query<CallbackQuery>,
 ) -> Response {
     // Propagate provider-reported errors as a redirect.
@@ -210,7 +240,7 @@ pub async fn gmail_callback(
         None => return not_configured(),
     };
 
-    let oauth = OAuthConfig::gmail(client_id, client_secret, redirect_uri());
+    let oauth = OAuthConfig::gmail(client_id, client_secret, redirect_uri(&headers));
 
     // Exchange authorization code for tokens.
     let token_resp = match oauth.exchange_code(&code).await {
@@ -338,13 +368,16 @@ pub async fn gmail_callback(
 
 /// GET /api/v1/auth/microsoft/authorize
 /// Returns a JSON body with the Microsoft authorization URL.
-pub async fn microsoft_authorize(State(state): State<Arc<AppState>>) -> Response {
+pub async fn microsoft_authorize(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Response {
     let (client_id, client_secret) = match get_microsoft_oauth_config() {
         Some(c) => c,
         None => return microsoft_not_configured(),
     };
 
-    let oauth = OAuthConfig::microsoft(client_id, client_secret, microsoft_redirect_uri());
+    let oauth = OAuthConfig::microsoft(client_id, client_secret, microsoft_redirect_uri(&headers));
     let state_val = Uuid::new_v4().to_string();
 
     {
@@ -359,6 +392,7 @@ pub async fn microsoft_authorize(State(state): State<Arc<AppState>>) -> Response
 /// GET /api/v1/auth/microsoft/callback?code=...&state=...
 pub async fn microsoft_callback(
     State(app_state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Query(q): Query<CallbackQuery>,
 ) -> Response {
     if let Some(err) = q.error {
@@ -404,7 +438,7 @@ pub async fn microsoft_callback(
         None => return microsoft_not_configured(),
     };
 
-    let oauth = OAuthConfig::microsoft(client_id, client_secret, microsoft_redirect_uri());
+    let oauth = OAuthConfig::microsoft(client_id, client_secret, microsoft_redirect_uri(&headers));
 
     let token_resp = match oauth.exchange_code(&code).await {
         Ok(t) => t,

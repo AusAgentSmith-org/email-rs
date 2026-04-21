@@ -101,7 +101,7 @@ fn run_desktop(port: u16, log: &std::path::Path) -> anyhow::Result<()> {
         menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
         MouseButton, TrayIconBuilder, TrayIconEvent,
     };
-    use wry::WebViewBuilder;
+    use wry::{WebContext, WebViewBuilder};
 
     let url = format!("http://localhost:{port}");
 
@@ -133,7 +133,23 @@ fn run_desktop(port: u16, log: &std::path::Path) -> anyhow::Result<()> {
         .with_min_inner_size(LogicalSize::new(800u32, 600u32))
         .build(&event_loop)?;
 
-    let _webview = WebViewBuilder::new().with_url(&url).build(&window)?;
+    // WebView2 defaults to creating its user-data folder next to the exe.
+    // When installed under `C:\Program Files\email-rs` that path is read-only
+    // and WebView2 fails with HRESULT 0x80070005 (Access is denied). Point it
+    // at a writable per-user location instead.
+    let data_dir = webview_data_dir();
+    if let Err(e) = std::fs::create_dir_all(&data_dir) {
+        win_log(
+            log,
+            &format!("could not create webview data dir {data_dir:?}: {e}"),
+        );
+    }
+
+    let mut web_context = WebContext::new(Some(data_dir));
+
+    let _webview = WebViewBuilder::with_web_context(&mut web_context)
+        .with_url(&url)
+        .build(&window)?;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(50));
@@ -181,6 +197,14 @@ fn wait_for_server_ready(port: u16, log: &std::path::Path) {
         log,
         "server did not become ready within 10s — opening window anyway",
     );
+}
+
+#[cfg(target_os = "windows")]
+fn webview_data_dir() -> std::path::PathBuf {
+    let base = std::env::var("LOCALAPPDATA")
+        .or_else(|_| std::env::var("APPDATA"))
+        .unwrap_or_else(|_| std::env::var("TEMP").unwrap_or_else(|_| "C:\\Windows\\Temp".into()));
+    std::path::PathBuf::from(base).join("email-rs").join("webview")
 }
 
 #[cfg(target_os = "windows")]
