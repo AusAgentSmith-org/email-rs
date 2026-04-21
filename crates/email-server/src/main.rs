@@ -18,6 +18,7 @@ use std::sync::Arc;
 use axum::{routing::get_service, Router};
 use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 use tracing::info;
+#[cfg(not(target_os = "windows"))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use crate::config::Config;
@@ -132,7 +133,7 @@ fn run_desktop(port: u16, log: &std::path::Path) -> anyhow::Result<()> {
         .with_min_inner_size(LogicalSize::new(800u32, 600u32))
         .build(&event_loop)?;
 
-    let _webview = WebViewBuilder::new(&window).with_url(&url).build()?;
+    let _webview = WebViewBuilder::new().with_url(&url).build(&window)?;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(50));
@@ -140,7 +141,6 @@ fn run_desktop(port: u16, log: &std::path::Path) -> anyhow::Result<()> {
         if let Ok(ev) = MenuEvent::receiver().try_recv() {
             if ev.id == open_id {
                 window.set_visible(true);
-                window.focus_window();
             } else if ev.id == quit_id {
                 *control_flow = ControlFlow::Exit;
             }
@@ -153,7 +153,6 @@ fn run_desktop(port: u16, log: &std::path::Path) -> anyhow::Result<()> {
             } = ev
             {
                 window.set_visible(true);
-                window.focus_window();
             }
         }
 
