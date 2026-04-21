@@ -184,8 +184,9 @@ fn run_tray(port: u16) -> anyhow::Result<()> {
 
 #[cfg(target_os = "windows")]
 fn exe_log_path() -> std::path::PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join("email-rs.log")))
-        .unwrap_or_else(|| std::path::PathBuf::from("email-rs.log"))
+    // Program Files is read-only for normal users; TEMP is always writable
+    let base = std::env::var("TEMP")
+        .or_else(|_| std::env::var("TMP"))
+        .unwrap_or_else(|_| "C:\\Windows\\Temp".into());
+    std::path::PathBuf::from(base).join("email-rs.log")
 }
