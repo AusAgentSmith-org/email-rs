@@ -106,6 +106,20 @@ async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<()> {
         }
     }
 
+    let migration_006 = include_str!("migrations/006_password.sql");
+    for statement in migration_006.split(';') {
+        let trimmed = statement.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Err(e) = sqlx::query(trimmed).execute(pool).await {
+            if e.to_string().contains("duplicate column name") {
+                continue;
+            }
+            return Err(e.into());
+        }
+    }
+
     Ok(())
 }
 

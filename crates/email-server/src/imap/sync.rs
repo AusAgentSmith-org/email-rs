@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::api::webhooks::fire_webhooks;
 use crate::auth::oauth2::{OAuthConfig, StoredToken};
 use crate::error::{AppError, Result};
+use crate::providers::generic_imap::GenericImapProvider;
 use crate::providers::gmail::GmailProvider;
 use crate::providers::MailProvider;
 
@@ -28,18 +29,16 @@ struct AccountRecord {
     id: String,
     email: String,
     provider_type: String,
-    #[allow(dead_code)]
     auth_type: String,
     oauth_token_json: Option<String>,
     #[allow(dead_code)]
     token_expiry: Option<String>,
-    #[allow(dead_code)]
     host: Option<String>,
-    #[allow(dead_code)]
     port: Option<i64>,
     #[allow(dead_code)]
     use_ssl: bool,
     sync_days_limit: Option<i64>,
+    password: Option<String>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -77,7 +76,7 @@ impl ImapSyncEngine {
         // 1. Load account from DB.
         let account = sqlx::query_as::<_, AccountRecord>(
             r#"SELECT id, email, provider_type, auth_type, oauth_token_json,
-                      token_expiry, host, port, use_ssl, sync_days_limit
+                      token_expiry, host, port, use_ssl, sync_days_limit, password
                FROM accounts WHERE id = ?"#,
         )
         .bind(account_id)
@@ -85,7 +84,43 @@ impl ImapSyncEngine {
         .await?
         .ok_or_else(|| AppError::NotFound(format!("account {} not found", account_id)))?;
 
-        // 2. Build StoredToken from JSON.
+        // 2. Password-based accounts skip OAuth entirely.
+        if account.auth_type == "app_password" || account.auth_type == "basic" {
+            let password = account
+                .password
+                .as_deref()
+                .ok_or_else(|| AppError::Auth("account has no password configured".to_string()))?;
+
+            let (imap_host, imap_port) = match account.provider_type.as_str() {
+                "microsoft365" => (
+                    account
+                        .host
+                        .as_deref()
+                        .unwrap_or("outlook.office365.com")
+                        .to_string(),
+                    account.port.unwrap_or(993) as u16,
+                ),
+                _ => {
+                    let host = account.host.as_deref().ok_or_else(|| {
+                        AppError::Auth("IMAP host not configured for account".to_string())
+                    })?;
+                    (host.to_string(), account.port.unwrap_or(993) as u16)
+                }
+            };
+
+            let provider = GenericImapProvider::new(
+                account_id.to_string(),
+                account.email.clone(),
+                password.to_string(),
+                imap_host,
+                imap_port,
+            );
+            self.sync_provider(account_id, provider, event_tx, account.sync_days_limit)
+                .await?;
+            return Ok(());
+        }
+
+        // 3. OAuth2 path: build StoredToken from JSON.
         let token_json = account
             .oauth_token_json
             .as_deref()
@@ -94,7 +129,7 @@ impl ImapSyncEngine {
         let mut stored: StoredToken = serde_json::from_str(token_json)
             .map_err(|e| AppError::Auth(format!("failed to parse token JSON: {}", e)))?;
 
-        // 3. Refresh if expired (or within 5-minute window).
+        // 4. Refresh if expired (or within 5-minute window).
         info!(
             "token expiry for {}: {:?} (expired={})",
             account_id,

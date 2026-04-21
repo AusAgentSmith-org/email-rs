@@ -30,9 +30,14 @@ pub struct SendResponse {
 struct AccountRow {
     email: String,
     provider_type: String,
+    auth_type: String,
     oauth_token_json: Option<String>,
     host: Option<String>,
     port: Option<i64>,
+    password: Option<String>,
+    smtp_host: Option<String>,
+    smtp_port: Option<i64>,
+    smtp_password: Option<String>,
 }
 
 pub async fn send_message(
@@ -40,7 +45,7 @@ pub async fn send_message(
     Json(req): Json<SendRequest>,
 ) -> Result<Json<SendResponse>> {
     let account = sqlx::query_as::<_, AccountRow>(
-        "SELECT email, provider_type, oauth_token_json, host, port FROM accounts WHERE id = ?",
+        "SELECT email, provider_type, auth_type, oauth_token_json, host, port, password, smtp_host, smtp_port, smtp_password FROM accounts WHERE id = ?",
     )
     .bind(&req.account_id)
     .fetch_optional(&state.pool)
@@ -49,7 +54,6 @@ pub async fn send_message(
 
     let config = match account.provider_type.as_str() {
         "gmail" => {
-            // Gmail uses SMTP with XOAUTH2 on smtp.gmail.com:587.
             let token_json = account
                 .oauth_token_json
                 .as_deref()
@@ -83,15 +87,38 @@ pub async fn send_message(
                 xoauth2: true,
             }
         }
-        _ => {
+        "microsoft365" if account.auth_type == "app_password" || account.auth_type == "basic" => {
+            let password = account
+                .smtp_password
+                .or(account.password)
+                .ok_or_else(|| AppError::Auth("no password configured for account".to_string()))?;
             let host = account
-                .host
+                .smtp_host
+                .unwrap_or_else(|| "smtp.office365.com".to_string());
+            let port = account.smtp_port.unwrap_or(587) as u16;
+            SmtpConfig {
+                host,
+                port,
+                username: account.email.clone(),
+                password,
+                use_tls: false, // STARTTLS on 587
+                xoauth2: false,
+            }
+        }
+        _ => {
+            let password = account
+                .smtp_password
+                .or(account.password)
+                .unwrap_or_default();
+            let host = account
+                .smtp_host
+                .or(account.host)
                 .ok_or_else(|| AppError::Smtp("no SMTP host configured for account".to_string()))?;
             SmtpConfig {
                 host,
-                port: account.port.unwrap_or(587) as u16,
+                port: account.smtp_port.or(account.port).unwrap_or(587) as u16,
                 username: account.email.clone(),
-                password: String::new(),
+                password,
                 use_tls: true,
                 xoauth2: false,
             }

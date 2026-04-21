@@ -158,4 +158,5 @@ pub trait RichCalendarProvider: CalendarProvider {
 }
 
 pub mod caldav;
+pub mod generic_imap;
 pub mod gmail;

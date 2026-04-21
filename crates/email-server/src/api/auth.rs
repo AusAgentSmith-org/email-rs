@@ -167,10 +167,7 @@ async fn fetch_userinfo(access_token: &str) -> Result<GoogleUserInfo> {
 
 /// GET /api/v1/auth/gmail/authorize
 /// Returns a JSON body with the Google authorization URL.
-pub async fn gmail_authorize(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> Response {
+pub async fn gmail_authorize(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
     let (client_id, client_secret) = match get_oauth_config() {
         Some(c) => c,
         None => return not_configured(),

@@ -23,6 +23,7 @@ pub struct AccountRow {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateAccount {
     pub name: String,
     pub email: String,
@@ -32,6 +33,10 @@ pub struct CreateAccount {
     pub host: Option<String>,
     pub port: Option<i64>,
     pub use_ssl: Option<bool>,
+    pub password: Option<String>,
+    pub smtp_host: Option<String>,
+    pub smtp_port: Option<i64>,
+    pub smtp_password: Option<String>,
 }
 
 pub async fn list_accounts(State(state): State<Arc<AppState>>) -> Result<Json<Vec<AccountRow>>> {
@@ -52,8 +57,10 @@ pub async fn create_account(
     let use_ssl = body.use_ssl.unwrap_or(true);
 
     sqlx::query(
-        r#"INSERT INTO accounts (id, name, email, provider_type, auth_type, oauth_token_json, host, port, use_ssl)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        r#"INSERT INTO accounts
+               (id, name, email, provider_type, auth_type, oauth_token_json,
+                host, port, use_ssl, password, smtp_host, smtp_port, smtp_password)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(&id)
     .bind(&body.name)
@@ -64,6 +71,10 @@ pub async fn create_account(
     .bind(&body.host)
     .bind(body.port)
     .bind(use_ssl)
+    .bind(&body.password)
+    .bind(&body.smtp_host)
+    .bind(body.smtp_port)
+    .bind(&body.smtp_password)
     .execute(&state.pool)
     .await?;
 

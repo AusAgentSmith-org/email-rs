@@ -42,6 +42,87 @@ function GoogleGIcon() {
   );
 }
 
+// ── Microsoft app-password form ───────────────────────────────────────────────
+
+interface MicrosoftAppPasswordFormProps {
+  onSuccess: () => void;
+  styles: Record<string, string>;
+}
+
+function MicrosoftAppPasswordForm({ onSuccess, styles: s }: MicrosoftAppPasswordFormProps) {
+  const { setAccounts } = useAppStore();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [imapHost, setImapHost] = useState('outlook.office365.com');
+  const [smtpHost, setSmtpHost] = useState('smtp.office365.com');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiPost<Account>('/api/v1/accounts', {
+        name,
+        email,
+        providerType: 'microsoft365',
+        authType: 'app_password',
+        host: imapHost,
+        port: 993,
+        password,
+        smtpHost,
+        smtpPort: 587,
+        smtpPassword: password,
+      });
+      const res = await fetch('/api/v1/accounts');
+      const data = (await res.json()) as Account[];
+      setAccounts(data);
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form className={s.form} onSubmit={handleSubmit}>
+      <div className={s.field}>
+        <label className={s.label} htmlFor="ms-ap-name">Name</label>
+        <input id="ms-ap-name" className={s.input} type="text" value={name}
+          onChange={(e) => setName(e.target.value)} required autoComplete="name" />
+      </div>
+      <div className={s.field}>
+        <label className={s.label} htmlFor="ms-ap-email">Work email</label>
+        <input id="ms-ap-email" className={s.input} type="email" value={email}
+          onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+      </div>
+      <div className={s.field}>
+        <label className={s.label} htmlFor="ms-ap-pw">App password</label>
+        <input id="ms-ap-pw" className={s.input} type="password" value={password}
+          onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+      </div>
+      <div className={s.field}>
+        <label className={s.label} htmlFor="ms-ap-imap">IMAP host</label>
+        <input id="ms-ap-imap" className={s.input} type="text" value={imapHost}
+          onChange={(e) => setImapHost(e.target.value)} required />
+      </div>
+      <div className={s.field}>
+        <label className={s.label} htmlFor="ms-ap-smtp">SMTP host</label>
+        <input id="ms-ap-smtp" className={s.input} type="text" value={smtpHost}
+          onChange={(e) => setSmtpHost(e.target.value)} required />
+      </div>
+      {error && <p className={s.errorMsg}>{error}</p>}
+      <button className={s.submitBtn} type="submit" disabled={submitting}>
+        {submitting && <span className={s.spinner} />}
+        {submitting ? 'Adding account…' : 'Add account'}
+      </button>
+    </form>
+  );
+}
+
 // ── Manual IMAP/SMTP form ────────────────────────────────────────────────────
 
 interface ManualFormProps {
@@ -219,6 +300,7 @@ export function AccountSetup({ onAccountAdded }: AccountSetupProps) {
   const [gmailLoading, setGmailLoading] = useState(false);
   const [msLoading, setMsLoading] = useState(false);
   const [showManual, setShowManual] = useState(false);
+  const [showMsAppPassword, setShowMsAppPassword] = useState(false);
   const [oauthError, setOauthError] = useState<string | null>(null);
 
   const startOAuth = async (path: string, done: (loading: boolean) => void) => {
@@ -262,11 +344,25 @@ export function AccountSetup({ onAccountAdded }: AccountSetupProps) {
           className={styles.msBtn}
           type="button"
           onClick={handleConnectMicrosoft}
-          disabled={gmailLoading || msLoading}
+          disabled={gmailLoading || msLoading || showMsAppPassword}
         >
           {msLoading ? <span className={styles.spinner} /> : <MicrosoftIcon />}
           {msLoading ? 'Connecting…' : 'Connect Microsoft 365'}
         </button>
+
+        {!showMsAppPassword && (
+          <button
+            className={styles.manualLink}
+            type="button"
+            onClick={() => setShowMsAppPassword(true)}
+          >
+            Work account blocked? Use app password instead
+          </button>
+        )}
+
+        {showMsAppPassword && (
+          <MicrosoftAppPasswordForm onSuccess={onAccountAdded} styles={styles} />
+        )}
 
         {oauthError && <p className={styles.errorMsg}>{oauthError}</p>}
 

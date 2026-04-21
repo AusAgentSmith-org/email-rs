@@ -204,7 +204,9 @@ fn webview_data_dir() -> std::path::PathBuf {
     let base = std::env::var("LOCALAPPDATA")
         .or_else(|_| std::env::var("APPDATA"))
         .unwrap_or_else(|_| std::env::var("TEMP").unwrap_or_else(|_| "C:\\Windows\\Temp".into()));
-    std::path::PathBuf::from(base).join("email-rs").join("webview")
+    std::path::PathBuf::from(base)
+        .join("email-rs")
+        .join("webview")
 }
 
 #[cfg(target_os = "windows")]
