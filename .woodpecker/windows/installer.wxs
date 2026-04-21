@@ -27,7 +27,7 @@
 
     <!-- WixUI_Minimal: shows install progress and a finish page -->
     <ui:WixUI Id="WixUI_Minimal"/>
-    <WixVariable Id="WixUILicenseRtf" Value="license.rtf"/>
+    <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)license.rtf"/>
 
     <!-- Directory layout -->
     <StandardDirectory Id="ProgramFiles64Folder">
