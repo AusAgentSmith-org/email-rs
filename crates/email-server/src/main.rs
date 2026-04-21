@@ -66,7 +66,7 @@ fn main() -> anyhow::Result<()> {
         });
 
         win_log(&log_path, "calling run_tray");
-        match run_tray(port) {
+        match run_tray(port, &log_path) {
             Ok(()) => win_log(&log_path, "run_tray returned Ok — exiting"),
             Err(e) => win_log(&log_path, &format!("tray error: {e:#}")),
         }
@@ -109,7 +109,7 @@ async fn run_server(cfg: Config) -> anyhow::Result<()> {
 }
 
 #[cfg(target_os = "windows")]
-fn run_tray(port: u16) -> anyhow::Result<()> {
+fn run_tray(port: u16, log: &std::path::Path) -> anyhow::Result<()> {
     use std::time::{Duration, Instant};
     use tray_icon::{
         menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
@@ -122,6 +122,7 @@ fn run_tray(port: u16) -> anyhow::Result<()> {
         window::WindowId,
     };
 
+    win_log(log, "run_tray: building menu");
     let open_item = MenuItem::new("Open email-rs", true, None);
     let quit_item = MenuItem::new("Quit", true, None);
     let open_id = open_item.id().clone();
@@ -129,13 +130,14 @@ fn run_tray(port: u16) -> anyhow::Result<()> {
 
     let menu = Menu::new();
     menu.append_items(&[&open_item, &PredefinedMenuItem::separator(), &quit_item])?;
+    win_log(log, "run_tray: menu built");
 
-    // Simple 32×32 blue icon
     let icon_rgba: Vec<u8> = (0..32u32 * 32)
         .flat_map(|_| [0x26u8, 0x8B, 0xD2, 0xFF])
         .collect();
 
     let url = format!("http://localhost:{}", port);
+    let log_path = log.to_path_buf();
 
     struct TrayApp {
         tray: Option<tray_icon::TrayIcon>,
@@ -144,20 +146,39 @@ fn run_tray(port: u16) -> anyhow::Result<()> {
         open_id: tray_icon::menu::MenuId,
         quit_id: tray_icon::menu::MenuId,
         url: String,
+        log: std::path::PathBuf,
+        resumed_called: bool,
     }
 
     impl ApplicationHandler for TrayApp {
         fn resumed(&mut self, _el: &ActiveEventLoop) {
+            if !self.resumed_called {
+                self.resumed_called = true;
+                win_log(&self.log, "run_tray: resumed() called");
+            }
             if self.tray.is_none() {
-                let icon =
-                    tray_icon::Icon::from_rgba(self.icon_rgba.clone(), 32, 32).expect("valid icon");
+                let icon_result = tray_icon::Icon::from_rgba(self.icon_rgba.clone(), 32, 32);
+                let icon = match icon_result {
+                    Ok(i) => i,
+                    Err(e) => {
+                        win_log(&self.log, &format!("run_tray: icon error: {e}"));
+                        return;
+                    }
+                };
                 if let Some(menu) = self.menu.take() {
-                    self.tray = TrayIconBuilder::new()
+                    win_log(&self.log, "run_tray: building tray icon");
+                    match TrayIconBuilder::new()
                         .with_menu(Box::new(menu))
                         .with_tooltip("email-rs")
                         .with_icon(icon)
                         .build()
-                        .ok();
+                    {
+                        Ok(t) => {
+                            win_log(&self.log, "run_tray: tray icon created");
+                            self.tray = Some(t);
+                        }
+                        Err(e) => win_log(&self.log, &format!("run_tray: tray build error: {e}")),
+                    }
                 }
             }
         }
@@ -173,6 +194,7 @@ fn run_tray(port: u16) -> anyhow::Result<()> {
                 if event.id == self.open_id {
                     let _ = webbrowser::open(&self.url);
                 } else if event.id == self.quit_id {
+                    win_log(&self.log, "run_tray: quit requested");
                     el.exit();
                 }
             }
@@ -189,7 +211,9 @@ fn run_tray(port: u16) -> anyhow::Result<()> {
         }
     }
 
+    win_log(log, "run_tray: creating EventLoop");
     let event_loop = EventLoop::new()?;
+    win_log(log, "run_tray: EventLoop created, calling run_app");
     let mut app = TrayApp {
         tray: None,
         menu: Some(menu),
@@ -197,8 +221,11 @@ fn run_tray(port: u16) -> anyhow::Result<()> {
         open_id,
         quit_id,
         url,
+        log: log_path,
+        resumed_called: false,
     };
     event_loop.run_app(&mut app)?;
+    win_log(log, "run_tray: run_app returned");
     Ok(())
 }
 
