@@ -132,13 +132,10 @@ fn run_desktop(port: u16, log: &std::path::Path) -> anyhow::Result<()> {
         .with_min_inner_size(LogicalSize::new(800u32, 600u32))
         .build(&event_loop)?;
 
-    let _webview = WebViewBuilder::new(&window)
-        .with_url(&url)
-        .build()?;
+    let _webview = WebViewBuilder::new(&window).with_url(&url).build()?;
 
     event_loop.run(move |event, _, control_flow| {
-        *control_flow =
-            ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(50));
+        *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(50));
 
         if let Ok(ev) = MenuEvent::receiver().try_recv() {
             if ev.id == open_id {
@@ -181,7 +178,10 @@ fn wait_for_server_ready(port: u16, log: &std::path::Path) {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    win_log(log, "server did not become ready within 10s — opening window anyway");
+    win_log(
+        log,
+        "server did not become ready within 10s — opening window anyway",
+    );
 }
 
 #[cfg(target_os = "windows")]
