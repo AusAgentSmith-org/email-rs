@@ -20,7 +20,7 @@ labels:
 steps:
   # ── Create/refresh Forgejo release before uploading ──────────────────────────
   - name: create-release
-    image: local
+    image: powershell
     environment:
       FORGEJO_TOKEN:
         from_secret: git_auth_token
@@ -58,7 +58,7 @@ steps:
 
   # ── Build frontend + Rust binary + MSI ───────────────────────────────────────
   - name: build-msi
-    image: local
+    image: powershell
     depends_on: [create-release]
     commands:
       - |
@@ -109,7 +109,7 @@ steps:
 
   # ── Upload .msi to the Forgejo release ───────────────────────────────────────
   - name: upload-msi
-    image: local
+    image: powershell
     depends_on: [build-msi]
     environment:
       FORGEJO_TOKEN:
@@ -132,7 +132,7 @@ steps:
 
   # ── Notifications ────────────────────────────────────────────────────────────
   - name: discord-success
-    image: local
+    image: powershell
     depends_on: [upload-msi]
     environment:
       DISCORD_WEBHOOK_URL:
@@ -158,7 +158,7 @@ steps:
       - status: [success]
 
   - name: discord-failure
-    image: local
+    image: powershell
     depends_on: [build-msi]
     environment:
       DISCORD_WEBHOOK_URL:
