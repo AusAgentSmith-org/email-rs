@@ -46,8 +46,8 @@ fn main() -> anyhow::Result<()> {
             }
         });
 
-        if let Err(e) = run_tray(port, &log_path) {
-            win_log(&log_path, &format!("tray error: {e:#}"));
+        if let Err(e) = run_desktop(port, &log_path) {
+            win_log(&log_path, &format!("desktop error: {e:#}"));
         }
         return Ok(());
     }
@@ -88,18 +88,21 @@ async fn run_server(cfg: Config) -> anyhow::Result<()> {
 }
 
 #[cfg(target_os = "windows")]
-fn run_tray(port: u16, log: &std::path::Path) -> anyhow::Result<()> {
+fn run_desktop(port: u16, log: &std::path::Path) -> anyhow::Result<()> {
     use std::time::{Duration, Instant};
+    use tao::{
+        dpi::LogicalSize,
+        event::{Event, WindowEvent},
+        event_loop::{ControlFlow, EventLoop},
+        window::WindowBuilder,
+    };
     use tray_icon::{
         menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
         MouseButton, TrayIconBuilder, TrayIconEvent,
     };
-    use winit::{
-        application::ApplicationHandler,
-        event::WindowEvent,
-        event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-        window::WindowId,
-    };
+    use wry::WebViewBuilder;
+
+    let url = format!("http://localhost:{port}");
 
     let open_item = MenuItem::new("Open email-rs", true, None);
     let quit_item = MenuItem::new("Quit", true, None);
@@ -109,87 +112,76 @@ fn run_tray(port: u16, log: &std::path::Path) -> anyhow::Result<()> {
     let menu = Menu::new();
     menu.append_items(&[&open_item, &PredefinedMenuItem::separator(), &quit_item])?;
 
-    // Simple 32×32 blue icon
     let icon_rgba: Vec<u8> = (0..32u32 * 32)
-        .flat_map(|_| [0x26u8, 0x8B, 0xD2, 0xFF])
+        .flat_map(|_| [0x26u8, 0x8Bu8, 0xD2u8, 0xFFu8])
         .collect();
 
-    let url = format!("http://localhost:{}", port);
-    let log_path = log.to_path_buf();
+    let _tray = TrayIconBuilder::new()
+        .with_menu(Box::new(menu))
+        .with_tooltip("email-rs")
+        .with_icon(tray_icon::Icon::from_rgba(icon_rgba, 32, 32)?)
+        .build()?;
 
-    struct TrayApp {
-        tray: Option<tray_icon::TrayIcon>,
-        menu: Option<tray_icon::menu::Menu>,
-        icon_rgba: Vec<u8>,
-        open_id: tray_icon::menu::MenuId,
-        quit_id: tray_icon::menu::MenuId,
-        url: String,
-        log: std::path::PathBuf,
-    }
+    // Wait for the Axum server to bind before opening the window
+    wait_for_server_ready(port, log);
 
-    impl ApplicationHandler for TrayApp {
-        fn resumed(&mut self, _el: &ActiveEventLoop) {
-            if self.tray.is_none() {
-                let icon = match tray_icon::Icon::from_rgba(self.icon_rgba.clone(), 32, 32) {
-                    Ok(i) => i,
-                    Err(e) => {
-                        win_log(&self.log, &format!("tray icon error: {e}"));
-                        return;
-                    }
-                };
-                if let Some(menu) = self.menu.take() {
-                    match TrayIconBuilder::new()
-                        .with_menu(Box::new(menu))
-                        .with_tooltip("email-rs")
-                        .with_icon(icon)
-                        .build()
-                    {
-                        Ok(t) => self.tray = Some(t),
-                        Err(e) => win_log(&self.log, &format!("tray build error: {e}")),
-                    }
-                }
+    let event_loop = EventLoop::new();
+    let window = WindowBuilder::new()
+        .with_title("email-rs")
+        .with_inner_size(LogicalSize::new(1280u32, 800u32))
+        .with_min_inner_size(LogicalSize::new(800u32, 600u32))
+        .build(&event_loop)?;
+
+    let _webview = WebViewBuilder::new(&window)
+        .with_url(&url)
+        .build()?;
+
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow =
+            ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(50));
+
+        if let Ok(ev) = MenuEvent::receiver().try_recv() {
+            if ev.id == open_id {
+                window.set_visible(true);
+                window.focus_window();
+            } else if ev.id == quit_id {
+                *control_flow = ControlFlow::Exit;
             }
         }
 
-        fn window_event(&mut self, _el: &ActiveEventLoop, _id: WindowId, _event: WindowEvent) {}
-
-        fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-            el.set_control_flow(ControlFlow::WaitUntil(
-                Instant::now() + Duration::from_millis(50),
-            ));
-
-            if let Ok(event) = MenuEvent::receiver().try_recv() {
-                if event.id == self.open_id {
-                    let _ = webbrowser::open(&self.url);
-                } else if event.id == self.quit_id {
-                    el.exit();
-                }
-            }
-
-            if let Ok(event) = TrayIconEvent::receiver().try_recv() {
-                if let TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    ..
-                } = event
-                {
-                    let _ = webbrowser::open(&self.url);
-                }
+        if let Ok(ev) = TrayIconEvent::receiver().try_recv() {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                ..
+            } = ev
+            {
+                window.set_visible(true);
+                window.focus_window();
             }
         }
-    }
 
-    let event_loop = EventLoop::new()?;
-    let mut app = TrayApp {
-        tray: None,
-        menu: Some(menu),
-        icon_rgba,
-        open_id,
-        quit_id,
-        url,
-        log: log_path,
-    };
-    event_loop.run_app(&mut app)?;
-    Ok(())
+        // Close button minimises to tray rather than quitting
+        if let Event::WindowEvent {
+            event: WindowEvent::CloseRequested,
+            ..
+        } = event
+        {
+            window.set_visible(false);
+        }
+    });
+}
+
+#[cfg(target_os = "windows")]
+fn wait_for_server_ready(port: u16, log: &std::path::Path) {
+    use std::time::Duration;
+    let addr = format!("127.0.0.1:{port}");
+    for _ in 0..100 {
+        if std::net::TcpStream::connect(&addr).is_ok() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    win_log(log, "server did not become ready within 10s — opening window anyway");
 }
 
 #[cfg(target_os = "windows")]

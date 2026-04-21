@@ -156,13 +156,18 @@ MSI installer built and shipped via Woodpecker CI (`loungeroomwinOrg` agent, Win
 | Thing | Status |
 |-------|--------|
 | Rust binary (MSVC target) | Done — release build, `windows_subsystem = "windows"` |
-| System tray (winit 0.30 + tray-icon 0.19) | Done — icon, Open/Quit menu, left-click opens browser |
-| MSI installer (WiX v5.0.2) | Done — WixUI_Minimal finish dialog, auto-launches tray after install |
+| Native WebView window (tao 0.30 + wry 0.47) | Done — opens on launch, 1280×800, min 800×600 |
+| System tray (tray-icon 0.19) | Done — icon, Open/Quit menu, left-click restores window |
+| MSI installer (WiX v5.0.2) | Done — WixUI_Minimal finish dialog, auto-launches app after install |
 | Error log | `%TEMP%\email-rs.log` — panic hook + explicit error paths write here |
 | CI pipeline | `.woodpecker/windows-release.yml` — triggers on tag or manual |
 
-**Known behaviour:**
-- `LaunchApp` custom action fires after `InstallFinalize` with `Impersonate="yes"` — tray should appear immediately after install. If elevated UAC context prevents it, use the Start Menu shortcut.
+**Behaviour:**
+- Launch → Axum server starts in background thread; app polls until server is ready (up to 10s), then opens a native WebView2 window showing the React UI.
+- Close button → hides to tray (does not quit). Tray left-click or "Open email-rs" menu → shows and focuses the window.
+- Tray "Quit" → exits the process and server.
+- Browser access (`http://localhost:<port>`) still works as a secondary access method.
+- Requires Microsoft Edge WebView2 Runtime (bundled with Windows 10 21H1+ and Windows 11).
 - App does **not** add itself to startup — launch from Start Menu or add `email-server.exe` to `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` manually if wanted.
 
 **Bugs fixed (2026-04-21):**

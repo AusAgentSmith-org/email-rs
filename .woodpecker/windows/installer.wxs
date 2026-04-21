@@ -53,7 +53,7 @@
       </Component>
     </ComponentGroup>
 
-    <!-- Start menu shortcut — launches the tray app directly -->
+    <!-- Start menu shortcut — launches the desktop window -->
     <ComponentGroup Id="Shortcuts">
       <Component Directory="AppMenuDir" Id="StartMenuShortcut">
         <Shortcut Id="AppShortcut"
