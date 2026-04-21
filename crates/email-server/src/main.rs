@@ -30,13 +30,21 @@ fn main() -> anyhow::Result<()> {
 
     #[cfg(target_os = "windows")]
     {
+        let log_path = exe_log_path();
+
+        // Catch panics and write them to the log before the process dies
+        let panic_log = log_path.clone();
+        std::panic::set_hook(Box::new(move |info| {
+            let msg = format!("panic: {info}");
+            let _ = std::fs::write(&panic_log, &msg);
+        }));
+
         let port = cfg.port;
-        let log_path = windows_log_path();
-        let log_path2 = log_path.clone();
+        let server_log = log_path.clone();
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
             if let Err(e) = rt.block_on(run_server(cfg)) {
-                let _ = std::fs::write(&log_path2, format!("server error: {e:#}"));
+                let _ = std::fs::write(&server_log, format!("server error: {e:#}"));
             }
         });
         if let Err(e) = run_tray(port) {
@@ -175,9 +183,9 @@ fn run_tray(port: u16) -> anyhow::Result<()> {
 }
 
 #[cfg(target_os = "windows")]
-fn windows_log_path() -> std::path::PathBuf {
-    let base = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".into());
-    let dir = std::path::PathBuf::from(base).join("email-rs");
-    let _ = std::fs::create_dir_all(&dir);
-    dir.join("email-rs.log")
+fn exe_log_path() -> std::path::PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("email-rs.log")))
+        .unwrap_or_else(|| std::path::PathBuf::from("email-rs.log"))
 }
