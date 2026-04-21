@@ -31,24 +31,44 @@ fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "windows")]
     {
         let log_path = exe_log_path();
+        win_log(&log_path, "startup: main() entered");
 
-        // Catch panics and write them to the log before the process dies
         let panic_log = log_path.clone();
         std::panic::set_hook(Box::new(move |info| {
-            let msg = format!("panic: {info}");
-            let _ = std::fs::write(&panic_log, &msg);
+            win_log(&panic_log, &format!("panic: {info}"));
         }));
+
+        win_log(
+            &log_path,
+            &format!("config: port={} db={}", cfg.port, cfg.database_url),
+        );
 
         let port = cfg.port;
         let server_log = log_path.clone();
         std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+            win_log(&server_log, "server thread: starting tokio runtime");
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(rt) => {
+                    win_log(&server_log, "server thread: runtime created");
+                    rt
+                }
+                Err(e) => {
+                    win_log(&server_log, &format!("server thread: runtime error: {e}"));
+                    return;
+                }
+            };
+            win_log(&server_log, "server thread: calling run_server");
             if let Err(e) = rt.block_on(run_server(cfg)) {
-                let _ = std::fs::write(&server_log, format!("server error: {e:#}"));
+                win_log(&server_log, &format!("server error: {e:#}"));
+            } else {
+                win_log(&server_log, "server thread: run_server returned Ok");
             }
         });
-        if let Err(e) = run_tray(port) {
-            let _ = std::fs::write(&log_path, format!("tray error: {e:#}"));
+
+        win_log(&log_path, "calling run_tray");
+        match run_tray(port) {
+            Ok(()) => win_log(&log_path, "run_tray returned Ok — exiting"),
+            Err(e) => win_log(&log_path, &format!("tray error: {e:#}")),
         }
         return Ok(());
     }
@@ -189,4 +209,21 @@ fn exe_log_path() -> std::path::PathBuf {
         .or_else(|_| std::env::var("TMP"))
         .unwrap_or_else(|_| "C:\\Windows\\Temp".into());
     std::path::PathBuf::from(base).join("email-rs.log")
+}
+
+#[cfg(target_os = "windows")]
+fn win_log(path: &std::path::Path, msg: &str) {
+    use std::io::Write;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let line = format!("[{ts}] {msg}\n");
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = f.write_all(line.as_bytes());
+    }
 }
