@@ -10,6 +10,7 @@ pub async fn create_pool(database_url: &str) -> anyhow::Result<(SqlitePool, bool
         .strip_prefix("sqlite:///")
         .map(|p| format!("/{p}"))
         .or_else(|| database_url.strip_prefix("sqlite://").map(String::from))
+        .or_else(|| database_url.strip_prefix("sqlite:").map(String::from))
         .unwrap_or_else(|| database_url.to_string());
 
     if file_path != ":memory:" && !file_path.is_empty() {
