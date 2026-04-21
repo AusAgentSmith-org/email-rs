@@ -17,6 +17,26 @@ when:
 labels:
   platform: windows/amd64
 
+# Woodpecker's default clone uses a Docker plugin image — doesn't work with local
+# backend on Windows (GCM prompts for interactive auth). Override with a PS clone
+# that embeds the CI-provided token into the HTTPS URL.
+clone:
+  - name: clone
+    image: local
+    commands:
+      - |
+        $ErrorActionPreference = 'Stop'
+        $env:GIT_TERMINAL_PROMPT = '0'
+        $env:GCM_INTERACTIVE      = 'never'
+        $url = $env:CI_REPO_CLONE_URL -replace '^https://',
+               "https://$($env:CI_NETRC_USERNAME):$($env:CI_NETRC_PASSWORD)@"
+        git init --initial-branch=main | Out-Null
+        git config --global --replace-all safe.directory '*'
+        git config --local credential.helper ''
+        git remote add origin $url
+        git fetch --depth=1 --no-tags origin $env:CI_COMMIT_SHA
+        git checkout --detach FETCH_HEAD
+
 steps:
   # ── Create/refresh Forgejo release before uploading ──────────────────────────
   - name: create-release
