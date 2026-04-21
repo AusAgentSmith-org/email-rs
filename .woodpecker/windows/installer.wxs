@@ -75,7 +75,7 @@
                   Impersonate="yes"/>
 
     <InstallExecuteSequence>
-      <Custom Action="LaunchApp" After="InstallFinalize">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="LaunchApp" After="InstallFinalize" Condition='NOT REMOVE~="ALL"'/>
     </InstallExecuteSequence>
 
   </Package>
