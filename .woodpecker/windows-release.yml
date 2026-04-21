@@ -1,141 +1,179 @@
-# Builds a Windows installer and uploads it as a Forgejo release asset.
-# Triggers: version tags (v*) and manual runs — quality checks run separately
-# via Forgejo Actions CI on every push.
+# Builds a Windows MSI installer and uploads it as a Forgejo release asset.
+# Runs natively on the Windows agent (platform=windows/amd64) via the local backend.
 #
-# Installer: NSIS .exe (cross-compiled from Linux). Service wrapper: WinSW
-# (downloaded from GitHub releases). Silent install: /S flag.
+# Required tooling on the runner machine (one-time setup):
+#   - Rust (rustup) with x86_64-pc-windows-msvc target
+#   - Visual Studio Build Tools 2022 (VCTools workload) — for MSVC linker
+#   - Node.js LTS
+#   - .NET SDK 8 + WiX v5 (`dotnet tool install --global wix --version 5.0.2`)
+#
+# Silent install:    msiexec /i email-rs-<ver>-installer.msi /qn
+# Silent uninstall:  msiexec /x {D9E7F2A4-8B1C-4E3D-9F5A-6C2D8E4F1B9A} /qn
 when:
   - event: tag
     ref: refs/tags/v*
   - event: manual
 
-variables:
-  - &rust_image 'rust:1.88-bookworm'
+labels:
+  platform: windows/amd64
 
 steps:
-  # ── Create Forgejo release before builds start uploading ─────────────────
+  # ── Create/refresh Forgejo release before uploading ──────────────────────────
   - name: create-release
-    image: alpine:3.20
     environment:
       FORGEJO_TOKEN:
         from_secret: git_auth_token
     commands:
-      - apk add --no-cache curl jq
       - |
-        if [ -n "${CI_COMMIT_TAG:-}" ]; then
-          TAG="$CI_COMMIT_TAG"
-          TITLE="$CI_COMMIT_TAG"
-          BODY="Release $CI_COMMIT_TAG"
-          PRERELEASE=false
-        else
-          HASH=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
-          TAG="latest"
-          TITLE="Latest build ($HASH)"
-          BODY="Rolling build from $CI_COMMIT_SHA on branch ${CI_COMMIT_BRANCH:-main}"
-          PRERELEASE=true
-        fi
+        $ErrorActionPreference = 'Stop'
+        $headers = @{ Authorization = "token $env:FORGEJO_TOKEN" }
+        if ($env:CI_COMMIT_TAG) {
+          $tag   = $env:CI_COMMIT_TAG
+          $title = $env:CI_COMMIT_TAG
+          $body  = "Release $env:CI_COMMIT_TAG"
+          $pre   = $false
+        } else {
+          $hash  = $env:CI_COMMIT_SHA.Substring(0, 7)
+          $tag   = "latest"
+          $title = "Latest build ($hash)"
+          $body  = "Rolling build from $env:CI_COMMIT_SHA"
+          $pre   = $true
+        }
+        $base = "https://repo.indexarr.net/api/v1/repos/$env:CI_REPO"
+        try {
+          $existing = Invoke-RestMethod -Headers $headers -Uri "$base/releases/tags/$tag"
+          Invoke-RestMethod -Method Delete -Headers $headers -Uri "$base/releases/$($existing.id)"
+        } catch {}
+        if ($tag -eq "latest") {
+          try { Invoke-RestMethod -Method Delete -Headers $headers -Uri "$base/tags/latest" } catch {}
+        }
+        $payload = @{
+          tag_name = $tag; target_commitish = $env:CI_COMMIT_SHA
+          name = $title; body = $body; draft = $false; prerelease = $pre
+        } | ConvertTo-Json
+        Invoke-RestMethod -Method Post -Headers $headers -ContentType "application/json" `
+          -Uri "$base/releases" -Body $payload | Out-Null
+        Write-Host "Release '$tag' created."
 
-        EXISTING_ID=$(curl -sf -H "Authorization: token $FORGEJO_TOKEN" \
-          "https://repo.indexarr.net/api/v1/repos/$CI_REPO/releases/tags/$TAG" \
-          | jq -r '.id // empty' || true)
-        [ -n "$EXISTING_ID" ] && curl -sf -X DELETE -H "Authorization: token $FORGEJO_TOKEN" \
-          "https://repo.indexarr.net/api/v1/repos/$CI_REPO/releases/$EXISTING_ID" || true
-        [ "$TAG" = "latest" ] && curl -sf -X DELETE -H "Authorization: token $FORGEJO_TOKEN" \
-          "https://repo.indexarr.net/api/v1/repos/$CI_REPO/tags/latest" || true
-
-        curl -sf -X POST \
-          -H "Authorization: token $FORGEJO_TOKEN" \
-          -H "Content-Type: application/json" \
-          "https://repo.indexarr.net/api/v1/repos/$CI_REPO/releases" \
-          -d "{\"tag_name\":\"$TAG\",\"target_commitish\":\"$CI_COMMIT_SHA\",\"name\":\"$TITLE\",\"body\":\"$BODY\",\"draft\":false,\"prerelease\":$PRERELEASE}"
-        echo "Release $TAG created."
-
-  # ── Windows installer (cross-compiled from Linux via cargo-xwin + NSIS) ──
-  - name: build-windows
-    image: *rust_image
+  # ── Build frontend + Rust binary + MSI ───────────────────────────────────────
+  - name: build-msi
     depends_on: [create-release]
+    commands:
+      - |
+        $ErrorActionPreference = 'Stop'
+
+        # Strip [patch] sections (local dev overrides; registry packages in CI)
+        foreach ($file in @("Cargo.toml", "crates\email-server\Cargo.toml")) {
+          if (-not (Test-Path $file)) { continue }
+          $out = @(); $skip = $false
+          foreach ($l in (Get-Content $file)) {
+            if ($l -match '^\[patch')        { $skip = $true;  continue }
+            if ($skip -and $l -match '^\[')  { $skip = $false }
+            if ($skip -and $l -match '^\s*$'){ $skip = $false; continue }
+            if (-not $skip) { $out += $l }
+          }
+          $out | Set-Content $file
+        }
+
+        # React frontend
+        Push-Location frontend
+        npm ci
+        if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
+        npx vite build --outDir ..\staging\static --emptyOutDir
+        if ($LASTEXITCODE -ne 0) { throw "vite build failed" }
+        Pop-Location
+
+        # Rust server (native Windows MSVC build)
+        rustup target add x86_64-pc-windows-msvc
+        cargo build --release --target x86_64-pc-windows-msvc -p email-server
+        if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
+        Copy-Item target\x86_64-pc-windows-msvc\release\email-server.exe staging\ -Force
+
+        # Version — strip leading v from tag, fallback for manual runs
+        $raw = if ($env:CI_COMMIT_TAG) { $env:CI_COMMIT_TAG } else { "v0.0.0" }
+        $version = $raw -replace '^v', ''
+
+        # WiX build (Util extension provides InternetShortcut)
+        wix extension add -g WixToolset.Util.wixext
+        wix build `
+          -d "AppVersion=$version" `
+          -d "StagingDir=$((Get-Location).Path)\staging" `
+          -arch x64 `
+          -ext WixToolset.Util.wixext `
+          .woodpecker\windows\installer.wxs `
+          -o "email-rs-$version-installer.msi"
+        if ($LASTEXITCODE -ne 0) { throw "wix build failed" }
+        Write-Host "Built email-rs-$version-installer.msi"
+
+  # ── Upload .msi to the Forgejo release ───────────────────────────────────────
+  - name: upload-msi
+    depends_on: [build-msi]
     environment:
-      CI: "true"
-      XWIN_CACHE_DIR: /root/.cache/xwin
       FORGEJO_TOKEN:
         from_secret: git_auth_token
     commands:
-      - apt-get update -qq
       - |
-        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-          lld clang llvm curl wget jq unzip pkg-config libssl-dev nsis
-      - curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs
+        $ErrorActionPreference = 'Stop'
+        $tag = if ($env:CI_COMMIT_TAG) { $env:CI_COMMIT_TAG } else { "latest" }
+        $headers = @{ Authorization = "token $env:FORGEJO_TOKEN" }
+        $rel = Invoke-RestMethod -Headers $headers `
+          -Uri "https://repo.indexarr.net/api/v1/repos/$env:CI_REPO/releases/tags/$tag"
+        Get-ChildItem -Filter "email-rs-*-installer.msi" | ForEach-Object {
+          Write-Host "Uploading $($_.Name)"
+          $url = "https://repo.indexarr.net/api/v1/repos/$env:CI_REPO/releases/$($rel.id)/assets?name=$($_.Name)"
+          & curl.exe -sf -X POST `
+            -H "Authorization: token $env:FORGEJO_TOKEN" `
+            -F "attachment=@$($_.FullName)" $url
+          if ($LASTEXITCODE -ne 0) { throw "upload failed for $($_.Name)" }
+        }
 
-      # Strip local [patch] overrides (don't exist in CI)
-      - sed -i '/^\[patch\]/,/^$/d' Cargo.toml || true
-      - sed -i '/^\[patch\]/,/^$/d' crates/email-server/Cargo.toml || true
-
-      # Build React frontend
-      - cd frontend && npm ci && npx vite build --outDir /tmp/email-rs-static --emptyOutDir && cd ..
-
-      # Cross-compile Rust binary for Windows (MSVC target via cargo-xwin)
-      - rustup target add x86_64-pc-windows-msvc
-      - cargo install --locked cargo-xwin --version 0.19.2
-      - cargo xwin build --release --target x86_64-pc-windows-msvc -p email-server
-
-      # Stage installer inputs
-      - mkdir -p .nsis-staging
-      - cp target/x86_64-pc-windows-msvc/release/email-server.exe .nsis-staging/
-      - cp -r /tmp/email-rs-static .nsis-staging/static
-      # WinSW from GitHub releases (renamed to email-rs-svc.exe; reads config from same-named .xml)
-      - wget -q https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe -O .nsis-staging/email-rs-svc.exe
-
-      # Build NSIS installer (output lands in workspace root)
-      - |
-        RAW="${CI_COMMIT_TAG:-v0.0.0}"
-        VERSION=$(echo "$RAW" | sed 's/^v//')
-        makensis \
-          -DAPP_VERSION="$VERSION" \
-          -DSTAGING="$(pwd)/.nsis-staging" \
-          -DSCRIPTS="$(pwd)/.woodpecker/windows" \
-          -DOUTPUT_DIR="$(pwd)" \
-          .woodpecker/windows/installer.nsi
-
-      # Upload installer .exe to the Forgejo release
-      - |
-        TAG="${CI_COMMIT_TAG:-latest}"
-        REL_ID=$(curl -sf -H "Authorization: token $FORGEJO_TOKEN" \
-          "https://repo.indexarr.net/api/v1/repos/$CI_REPO/releases/tags/$TAG" \
-          | jq -r '.id')
-        find . -maxdepth 1 -name 'email-rs-*-installer.exe' | while read f; do
-          echo "Uploading $(basename "$f")"
-          curl -sf -X POST -H "Authorization: token $FORGEJO_TOKEN" \
-            -F "attachment=@$f" \
-            "https://repo.indexarr.net/api/v1/repos/$CI_REPO/releases/$REL_ID/assets?name=$(basename "$f")"
-        done
-
-  # ── Notifications ─────────────────────────────────────────────────────────
+  # ── Notifications ────────────────────────────────────────────────────────────
   - name: discord-success
-    image: alpine/curl
-    depends_on: [build-windows]
+    depends_on: [upload-msi]
     environment:
       DISCORD_WEBHOOK_URL:
         from_secret: discord_webhook_url
     commands:
       - |
-        HASH=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
-        curl -sf -H "Content-Type: application/json" \
-          -d "{\"embeds\":[{\"title\":\"email-rs Windows installer built\",\"description\":\"**$CI_REPO** — [$HASH]($CI_REPO_URL/commit/$CI_COMMIT_SHA)\",\"color\":5025616,\"footer\":{\"text\":\"$CI_REPO • $CI_COMMIT_AUTHOR\"},\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}]}" \
-          "$DISCORD_WEBHOOK_URL" || true
+        $hash = $env:CI_COMMIT_SHA.Substring(0, 7)
+        $ts = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        $payload = @{
+          embeds = @(@{
+            title = "email-rs Windows MSI built"
+            description = "**$env:CI_REPO** - [$hash]($env:CI_REPO_URL/commit/$env:CI_COMMIT_SHA)"
+            color = 5025616
+            footer = @{ text = "$env:CI_REPO - $env:CI_COMMIT_AUTHOR" }
+            timestamp = $ts
+          })
+        } | ConvertTo-Json -Depth 5
+        try {
+          Invoke-RestMethod -Method Post -Uri $env:DISCORD_WEBHOOK_URL `
+            -ContentType "application/json" -Body $payload
+        } catch {}
     when:
       - status: [success]
 
   - name: discord-failure
-    image: alpine/curl
-    depends_on: [build-windows]
+    depends_on: [build-msi]
     environment:
       DISCORD_WEBHOOK_URL:
         from_secret: discord_webhook_url
     commands:
       - |
-        HASH=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
-        curl -sf -H "Content-Type: application/json" \
-          -d "{\"embeds\":[{\"title\":\"email-rs Windows build failed\",\"description\":\"**$CI_REPO** — [$HASH]($CI_REPO_URL/commit/$CI_COMMIT_SHA)\",\"color\":15548997,\"footer\":{\"text\":\"$CI_REPO • $CI_COMMIT_AUTHOR\"},\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}]}" \
-          "$DISCORD_WEBHOOK_URL" || true
+        $hash = $env:CI_COMMIT_SHA.Substring(0, 7)
+        $ts = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        $payload = @{
+          embeds = @(@{
+            title = "email-rs Windows build failed"
+            description = "**$env:CI_REPO** - [$hash]($env:CI_REPO_URL/commit/$env:CI_COMMIT_SHA)"
+            color = 15548997
+            footer = @{ text = "$env:CI_REPO - $env:CI_COMMIT_AUTHOR" }
+            timestamp = $ts
+          })
+        } | ConvertTo-Json -Depth 5
+        try {
+          Invoke-RestMethod -Method Post -Uri $env:DISCORD_WEBHOOK_URL `
+            -ContentType "application/json" -Body $payload
+        } catch {}
     when:
       - status: [failure]

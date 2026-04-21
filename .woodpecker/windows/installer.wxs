@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  email-rs Windows MSI installer (WiX v5)
+
+  Build:
+    wix build -d AppVersion=<ver> -d StagingDir=<path> -arch x64 \
+      -ext WixToolset.Util.wixext installer.wxs -o email-rs-<ver>-installer.msi
+
+  Silent install:    msiexec /i email-rs-<ver>-installer.msi /qn
+  Silent uninstall:  msiexec /x {UpgradeCode} /qn
+
+  UpgradeCode MUST remain stable across versions — changing it breaks upgrades.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Package Name="email-rs"
+           Manufacturer="sprooty"
+           Version="$(var.AppVersion)"
+           UpgradeCode="D9E7F2A4-8B1C-4E3D-9F5A-6C2D8E4F1B9A"
+           Scope="perMachine">
+
+    <SummaryInformation Description="email-rs self-hosted email and calendar client"/>
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed."/>
+    <MediaTemplate EmbedCab="yes"/>
+
+    <!-- Directory layout -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="email-rs">
+        <Directory Id="STATICDIR" Name="static"/>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATAROOTDIR" Name="email-rs"/>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppMenuDir" Name="email-rs"/>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="email-rs" Level="1">
+      <ComponentGroupRef Id="Server"/>
+      <Files Include="$(var.StagingDir)\static\**" Directory="STATICDIR"/>
+      <ComponentGroupRef Id="Extras"/>
+    </Feature>
+
+    <!-- Server binary + native Windows service + per-service env vars -->
+    <ComponentGroup Id="Server">
+      <Component Directory="INSTALLFOLDER" Id="EmailServerExe">
+        <File Source="$(var.StagingDir)\email-server.exe" KeyPath="yes"/>
+
+        <ServiceInstall Id="EmailRsService"
+                        Name="email-rs"
+                        DisplayName="email-rs"
+                        Description="Self-hosted email and calendar client"
+                        Type="ownProcess"
+                        Start="auto"
+                        ErrorControl="normal"
+                        Account="LocalSystem"
+                        Vital="yes"/>
+
+        <ServiceControl Id="ControlEmailRsService"
+                        Name="email-rs"
+                        Start="install"
+                        Stop="both"
+                        Remove="uninstall"
+                        Wait="yes"/>
+
+        <!-- Windows reads service env from HKLM\...\Services\<name>\Environment (REG_MULTI_SZ) -->
+        <RegistryValue Root="HKLM"
+                       Key="SYSTEM\CurrentControlSet\Services\email-rs"
+                       Name="Environment"
+                       Type="multiString"
+                       Value="PORT=8585[~]HOST=127.0.0.1[~]FRONTEND_DIST=[INSTALLFOLDER]static[~]DATABASE_URL=sqlite:[CommonAppDataFolder]email-rs\email.db"/>
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="Extras">
+      <!-- Data folder (sqlite DB); Permanent so uninstall preserves user data -->
+      <Component Directory="DATAROOTDIR" Id="DataFolder" Permanent="yes">
+        <CreateFolder/>
+        <RegistryValue Root="HKLM" Key="Software\sprooty\email-rs" Name="DataDir"
+                       Type="string" Value="[DATAROOTDIR]" KeyPath="yes"/>
+      </Component>
+
+      <!-- Start menu shortcut: opens web UI in default browser -->
+      <Component Directory="AppMenuDir" Id="StartMenuShortcut">
+        <util:InternetShortcut Id="OpenEmailRsShortcut"
+                               Name="Open email-rs"
+                               Target="http://localhost:8585"/>
+        <RemoveFolder Id="RemoveAppMenuDir" On="uninstall"/>
+        <RegistryValue Root="HKCU" Key="Software\sprooty\email-rs" Name="Shortcut"
+                       Type="string" Value="1" KeyPath="yes"/>
+      </Component>
+    </ComponentGroup>
+
+  </Package>
+</Wix>
