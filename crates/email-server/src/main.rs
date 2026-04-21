@@ -31,13 +31,18 @@ fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "windows")]
     {
         let port = cfg.port;
+        let log_path = windows_log_path();
+        let log_path2 = log_path.clone();
         std::thread::spawn(move || {
-            tokio::runtime::Runtime::new()
-                .expect("tokio runtime")
-                .block_on(run_server(cfg))
-                .ok();
+            let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+            if let Err(e) = rt.block_on(run_server(cfg)) {
+                let _ = std::fs::write(&log_path2, format!("server error: {e:#}"));
+            }
         });
-        return run_tray(port);
+        if let Err(e) = run_tray(port) {
+            let _ = std::fs::write(&log_path, format!("tray error: {e:#}"));
+        }
+        return Ok(());
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -167,4 +172,12 @@ fn run_tray(port: u16) -> anyhow::Result<()> {
     };
     event_loop.run_app(&mut app)?;
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn windows_log_path() -> std::path::PathBuf {
+    let base = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".into());
+    let dir = std::path::PathBuf::from(base).join("email-rs");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join("email-rs.log")
 }
