@@ -96,7 +96,7 @@ steps:
         $version = $raw -replace '^v', ''
 
         # WiX build (Util extension provides InternetShortcut)
-        wix extension add -g WixToolset.Util.wixext
+        wix extension add -g WixToolset.Util.wixext/5.0.2
         wix build `
           -d "AppVersion=$version" `
           -d "StagingDir=$((Get-Location).Path)\staging" `
