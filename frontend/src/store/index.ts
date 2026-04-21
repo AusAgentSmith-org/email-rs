@@ -3,7 +3,6 @@ import { persist } from 'zustand/middleware';
 import type { Account, ConditionGroup, Folder, Message } from '../types';
 
 type Theme = 'light' | 'dark';
-type Density = 'compact' | 'cozy' | 'comfy';
 
 export interface ComposeState {
   accountId: string;
@@ -17,7 +16,7 @@ export interface ComposeState {
 
 interface AppState {
   theme: Theme;
-  density: Density;
+  densityLevel: number;
   selectedFolderId: string | null;
   selectedMessageId: string | null;
   folderSelectSeq: number;
@@ -35,7 +34,7 @@ interface AppState {
   patchMessage: (id: string, patch: Partial<Message>) => void;
   removeMessage: (id: string) => void;
   setTheme: (t: Theme) => void;
-  setDensity: (d: Density) => void;
+  setDensity: (d: number) => void;
   setSelectedFolder: (id: string) => void;
   setSelectedMessage: (id: string | null) => void;
   setFolders: (folders: Folder[]) => void;
@@ -60,7 +59,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       theme: 'light',
-      density: 'cozy',
+      densityLevel: 4,
       selectedFolderId: null,
       selectedMessageId: null,
       folderSelectSeq: 0,
@@ -76,7 +75,7 @@ export const useAppStore = create<AppState>()(
       selectedMessageIds: [],
 
       setTheme: (theme) => set({ theme }),
-      setDensity: (density) => set({ density }),
+      setDensity: (densityLevel) => set({ densityLevel }),
       setMessages: (msgs) => set({ messages: msgs }),
       patchMessage: (id, patch) => set((s) => ({ messages: s.messages.map((m) => m.id === id ? { ...m, ...patch } : m) })),
       removeMessage: (id) => set((s) => ({ messages: s.messages.filter((m) => m.id !== id), selectedMessageId: s.selectedMessageId === id ? null : s.selectedMessageId })),
@@ -114,7 +113,17 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'email-rs-app',
-      partialize: (state) => ({ theme: state.theme, density: state.density }),
+      version: 1,
+      migrate: (persistedState: unknown, version: number) => {
+        const s = persistedState as Record<string, unknown>;
+        if (version === 0 && typeof s.density === 'string') {
+          const map: Record<string, number> = { compact: 1, cozy: 4, comfy: 7 };
+          s.densityLevel = map[s.density as string] ?? 4;
+          delete s.density;
+        }
+        return s;
+      },
+      partialize: (state) => ({ theme: state.theme, densityLevel: state.densityLevel }),
     },
   ),
 );

@@ -7,6 +7,7 @@ import { ComposeModal } from './components/Compose/ComposeModal';
 import { SettingsModal } from './components/Settings/SettingsModal';
 import { CommandPalette } from './components/CommandPalette/CommandPalette';
 import { useAppStore } from './store';
+import { applyDensity } from './utils/density';
 import type { Account } from './types';
 
 const SIDEBAR_W_KEY = 'email_sidebar_w';
@@ -67,14 +68,14 @@ const handleStyle: React.CSSProperties = {
 };
 
 export function App() {
-  const { theme, density, accounts, setAccounts, compose, settingsOpen, openPalette, closePalette, paletteOpen } = useAppStore();
+  const { theme, densityLevel, accounts, setAccounts, compose, settingsOpen, openPalette, closePalette, paletteOpen } = useAppStore();
   const [accountsLoaded, setAccountsLoaded] = useState(false);
 
   const sidebar = usePanelResize(SIDEBAR_W_KEY,  DEFAULT_SIDEBAR_W, MIN_W, MAX_SIDEBAR_W);
   const msglist = usePanelResize(MSGLIST_W_KEY,  DEFAULT_MSGLIST_W, MIN_W, MAX_MSGLIST_W);
 
-  useEffect(() => { document.documentElement.setAttribute('data-theme',   theme);   }, [theme]);
-  useEffect(() => { document.documentElement.setAttribute('data-density', density); }, [density]);
+  useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
+  useEffect(() => { applyDensity(densityLevel); }, [densityLevel]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

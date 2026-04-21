@@ -1,8 +1,6 @@
 import styles from './Toolbar.module.css';
 import { useAppStore } from '../../store';
 
-type Density = 'compact' | 'cozy' | 'comfy';
-
 function GearIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" width="15" height="15">
@@ -29,32 +27,30 @@ function MoonIcon() {
   );
 }
 
-const DENSITY_OPTIONS: { value: Density; label: string; title: string }[] = [
-  { value: 'compact', label: '▪', title: 'Compact' },
-  { value: 'cozy',    label: '▫',  title: 'Cozy'    },
-  { value: 'comfy',   label: '□',  title: 'Comfy'   },
-];
-
 export function Toolbar() {
-  const { theme, density, setTheme, setDensity, openSettings } = useAppStore();
+  const { theme, densityLevel, setTheme, setDensity, openSettings } = useAppStore();
 
   return (
     <div className={styles.toolbar}>
       <div className={styles.spacer} />
 
       <div className={styles.densityGroup} role="group" aria-label="Message density">
-        {DENSITY_OPTIONS.map(({ value, label, title }) => (
-          <button
-            key={value}
-            type="button"
-            title={title}
-            className={`${styles.densityBtn}${density === value ? ` ${styles.active}` : ''}`}
-            onClick={() => setDensity(value)}
-            aria-pressed={density === value}
-          >
-            {label}
-          </button>
-        ))}
+        <button
+          type="button"
+          title="Denser"
+          className={styles.densityBtn}
+          onClick={() => setDensity(densityLevel - 1)}
+          disabled={densityLevel <= 0}
+          aria-label="Denser"
+        >−</button>
+        <button
+          type="button"
+          title="More spacious"
+          className={styles.densityBtn}
+          onClick={() => setDensity(densityLevel + 1)}
+          disabled={densityLevel >= 8}
+          aria-label="More spacious"
+        >+</button>
       </div>
 
       <button

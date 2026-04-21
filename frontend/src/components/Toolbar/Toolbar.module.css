@@ -34,17 +34,19 @@
   border: none;
   border-radius: calc(var(--radius-sm) - 1px);
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 15px;
+  line-height: 1;
+  font-family: var(--font-sans);
   cursor: pointer;
   transition: background var(--transition), color var(--transition);
 }
-.densityBtn:hover {
+.densityBtn:hover:not(:disabled) {
   background: var(--folder-hover);
   color: var(--text-mid);
 }
-.densityBtn.active {
-  background: var(--read-bg);
-  color: var(--text);
+.densityBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* Compose button */

@@ -73,25 +73,10 @@
   --scrollbar:           #3a3835;
 }
 
-/* ── Density ──────────────────────────────────────────────────────────────── */
-:root,
-[data-density="cozy"] {
-  --row-height:       56px;
+/* ── Density defaults (level 4 = Normal; overridden inline by JS) ─────────── */
+:root {
+  --row-height:       52px;
   --row-padding-v:    10px;
   --row-padding-h:    16px;
   --sidebar-item-h:   32px;
-}
-
-[data-density="compact"] {
-  --row-height:       36px;
-  --row-padding-v:    6px;
-  --row-padding-h:    12px;
-  --sidebar-item-h:   26px;
-}
-
-[data-density="comfy"] {
-  --row-height:       72px;
-  --row-padding-v:    14px;
-  --row-padding-h:    20px;
-  --sidebar-item-h:   38px;
 }

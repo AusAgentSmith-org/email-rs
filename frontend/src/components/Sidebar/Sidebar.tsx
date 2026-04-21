@@ -145,16 +145,6 @@ function MoonIcon() {
   );
 }
 
-function DensityIcon({ value }: { value: 'compact' | 'cozy' | 'comfy' }) {
-  return (
-    <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" width="13" height="13">
-      {value === 'compact' && <><path d="M2 3h10M2 6h10M2 9h10M2 12h10" /></>}
-      {value === 'cozy'    && <><path d="M2 3.5h10M2 7h10M2 10.5h10" /></>}
-      {value === 'comfy'   && <><path d="M2 4h10M2 10h10" /></>}
-    </svg>
-  );
-}
-
 // Smart folder icons
 function AllInboxIcon({ className }: { className?: string }) {
   return (
@@ -314,7 +304,7 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const { selectedFolderId, setSelectedFolder, setFolders, openCompose, searchQuery, setSearchQuery, conditionGroup, navigateToMessage, advancedSearchOpen, openAdvancedSearch, closeAdvancedSearch, theme, density, setTheme, setDensity, openSettings } = useAppStore();
+  const { selectedFolderId, setSelectedFolder, setFolders, openCompose, searchQuery, setSearchQuery, conditionGroup, navigateToMessage, advancedSearchOpen, openAdvancedSearch, closeAdvancedSearch, theme, densityLevel, setTheme, setDensity, openSettings } = useAppStore();
   const navRef = useRef<HTMLElement>(null);
   const { contextMenu, openContextMenu } = useContextMenu();
 
@@ -652,18 +642,22 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
 
       <div className={styles.footer}>
         <div className={styles.densityGroup} role="group" aria-label="Message density">
-          {(['compact', 'cozy', 'comfy'] as const).map((d) => (
-            <button
-              key={d}
-              type="button"
-              title={d.charAt(0).toUpperCase() + d.slice(1)}
-              className={`${styles.densityBtn}${density === d ? ` ${styles.densityActive}` : ''}`}
-              onClick={() => setDensity(d)}
-              aria-pressed={density === d}
-            >
-              <DensityIcon value={d} />
-            </button>
-          ))}
+          <button
+            type="button"
+            title="Denser"
+            className={styles.densityBtn}
+            onClick={() => setDensity(densityLevel - 1)}
+            disabled={densityLevel <= 0}
+            aria-label="Denser"
+          >−</button>
+          <button
+            type="button"
+            title="More spacious"
+            className={styles.densityBtn}
+            onClick={() => setDensity(densityLevel + 1)}
+            disabled={densityLevel >= 8}
+            aria-label="More spacious"
+          >+</button>
         </div>
         <div className={styles.footerRight}>
           <button

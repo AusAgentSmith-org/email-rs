@@ -464,22 +464,25 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
+  width: 22px;
   height: 22px;
   background: transparent;
   border: none;
   border-radius: calc(var(--radius-sm) - 1px);
   color: var(--text-dim);
   cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  font-family: var(--font-sans);
   transition: background var(--transition), color var(--transition);
 }
-.densityBtn:hover {
+.densityBtn:hover:not(:disabled) {
   background: var(--folder-hover);
   color: var(--text-mid);
 }
-.densityActive {
-  background: var(--read-bg);
-  color: var(--text);
+.densityBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .footerRight {

@@ -33,7 +33,7 @@ export function CommandPalette() {
     folders, accounts,
     selectedMessageId, messages,
     setSelectedFolder, openCompose, openSettings,
-    setTheme, setDensity, theme, density,
+    setTheme, setDensity, theme, densityLevel,
     openAdvancedSearch,
     patchMessage, removeMessage,
   } = useAppStore();
@@ -91,9 +91,8 @@ export function CommandPalette() {
       handler: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
     });
 
-    if (density !== 'compact') list.push({ id: 'density:compact', label: 'Density: Compact', keywords: ['compact', 'density', 'view', 'layout'], handler: () => setDensity('compact') });
-    if (density !== 'cozy')    list.push({ id: 'density:cozy',    label: 'Density: Cozy',    keywords: ['cozy', 'density', 'view', 'layout'],    handler: () => setDensity('cozy') });
-    if (density !== 'comfy')   list.push({ id: 'density:comfy',   label: 'Density: Comfy',   keywords: ['comfy', 'comfortable', 'density', 'view', 'layout'], handler: () => setDensity('comfy') });
+    if (densityLevel > 0) list.push({ id: 'density:down', label: 'Density: Denser', keywords: ['compact', 'dense', 'density', 'view', 'layout'], handler: () => setDensity(densityLevel - 1) });
+    if (densityLevel < 8) list.push({ id: 'density:up',   label: 'Density: More spacious', keywords: ['spacious', 'cozy', 'comfy', 'airy', 'density', 'view', 'layout'], handler: () => setDensity(densityLevel + 1) });
 
     const multiAccount = accounts.length > 1;
     for (const folder of folders.filter((f) => !f.isExcluded)) {
@@ -174,7 +173,7 @@ export function CommandPalette() {
     }
 
     return list;
-  }, [folders, accounts, selectedMessage, theme, density, openCompose, setSelectedFolder, openSettings, setTheme, setDensity, openAdvancedSearch, patchMessage, removeMessage]);
+  }, [folders, accounts, selectedMessage, theme, densityLevel, openCompose, setSelectedFolder, openSettings, setTheme, setDensity, openAdvancedSearch, patchMessage, removeMessage]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return actions.slice(0, 12);

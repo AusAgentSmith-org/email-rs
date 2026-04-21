@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import styles from './SettingsModal.module.css';
 import { useAppStore } from '../../store';
+import { DENSITY_MIN, DENSITY_MAX, DENSITY_LABELS } from '../../utils/density';
 import type { Account, AccountSettings, Folder } from '../../types';
 
 interface Webhook {
@@ -12,12 +13,10 @@ interface Webhook {
   enabled: boolean;
 }
 
-type Density = 'compact' | 'cozy' | 'comfy';
-
 // ── Global Settings Tab ───────────────────────────────────────────────────────
 
 function GlobalTab() {
-  const { theme, density, setTheme, setDensity } = useAppStore();
+  const { theme, densityLevel, setTheme, setDensity } = useAppStore();
 
   return (
     <div>
@@ -38,15 +37,23 @@ function GlobalTab() {
 
         <div className={styles.fieldRow}>
           <span className={styles.label}>Density</span>
-          <select
-            className={styles.select}
-            value={density}
-            onChange={(e) => setDensity(e.target.value as Density)}
-          >
-            <option value="compact">Compact</option>
-            <option value="cozy">Cozy</option>
-            <option value="comfy">Comfy</option>
-          </select>
+          <div className={styles.stepper}>
+            <button
+              type="button"
+              className={styles.stepBtn}
+              onClick={() => setDensity(densityLevel - 1)}
+              disabled={densityLevel <= DENSITY_MIN}
+              aria-label="Denser"
+            >−</button>
+            <span className={styles.stepLabel}>{DENSITY_LABELS[densityLevel]}</span>
+            <button
+              type="button"
+              className={styles.stepBtn}
+              onClick={() => setDensity(densityLevel + 1)}
+              disabled={densityLevel >= DENSITY_MAX}
+              aria-label="More spacious"
+            >+</button>
+          </div>
         </div>
       </div>
     </div>

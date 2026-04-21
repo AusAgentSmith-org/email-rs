@@ -67,19 +67,14 @@ a:hover {
   text-decoration: underline;
 }
 
-/* Density — target message rows via data-role attribute */
-[data-density="compact"] [data-role="message-row"] {
-  height: 36px;
+/* Density — row height comes from --row-height CSS var set by JS */
+[data-role="message-row"] {
+  height: var(--row-height);
 }
-[data-density="compact"] [data-role="message-row"] .avatar {
+/* Hide avatar + preview at the two most compact levels */
+[data-density-level="0"] [data-role="message-row"] .avatar,
+[data-density-level="1"] [data-role="message-row"] .avatar,
+[data-density-level="0"] [data-role="message-row"] .preview,
+[data-density-level="1"] [data-role="message-row"] .preview {
   display: none;
-}
-[data-density="compact"] [data-role="message-row"] .preview {
-  display: none;
-}
-[data-density="cozy"] [data-role="message-row"] {
-  height: 52px;
-}
-[data-density="comfy"] [data-role="message-row"] {
-  height: 68px;
 }
