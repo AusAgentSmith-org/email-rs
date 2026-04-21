@@ -57,6 +57,8 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           docker buildx build \
+            --build-arg GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID \
+            --build-arg GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET \
             --tag repo.indexarr.net/indexarr/email-rs:latest \
             --tag repo.indexarr.net/indexarr/email-rs:${{ github.sha }} \
             --push \

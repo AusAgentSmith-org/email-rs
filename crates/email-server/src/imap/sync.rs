@@ -235,10 +235,10 @@ impl ImapSyncEngine {
 
     /// Refresh the OAuth token for an account, update DB, and return the new token.
     async fn refresh_token(&self, account_id: &str, stored: &StoredToken) -> Result<StoredToken> {
-        let client_id = std::env::var("GOOGLE_CLIENT_ID")
-            .map_err(|_| AppError::Auth("GOOGLE_CLIENT_ID not set".to_string()))?;
-        let client_secret = std::env::var("GOOGLE_CLIENT_SECRET")
-            .map_err(|_| AppError::Auth("GOOGLE_CLIENT_SECRET not set".to_string()))?;
+        let client_id = crate::auth::google_client_id()
+            .ok_or_else(|| AppError::Auth("GOOGLE_CLIENT_ID not configured".to_string()))?;
+        let client_secret = crate::auth::google_client_secret()
+            .ok_or_else(|| AppError::Auth("GOOGLE_CLIENT_SECRET not configured".to_string()))?;
 
         let refresh = stored.refresh_token.as_deref().ok_or_else(|| {
             AppError::Auth("no refresh token available for token refresh".to_string())

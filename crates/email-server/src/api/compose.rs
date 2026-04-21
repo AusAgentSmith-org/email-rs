@@ -63,10 +63,11 @@ pub async fn send_message(
                 .map_err(|e| AppError::Auth(format!("parse token: {}", e)))?;
 
             if stored.is_expired() {
-                let client_id = std::env::var("GOOGLE_CLIENT_ID")
-                    .map_err(|_| AppError::Auth("GOOGLE_CLIENT_ID not set".to_string()))?;
-                let client_secret = std::env::var("GOOGLE_CLIENT_SECRET")
-                    .map_err(|_| AppError::Auth("GOOGLE_CLIENT_SECRET not set".to_string()))?;
+                let client_id = crate::auth::google_client_id()
+                    .ok_or_else(|| AppError::Auth("GOOGLE_CLIENT_ID not configured".to_string()))?;
+                let client_secret = crate::auth::google_client_secret().ok_or_else(|| {
+                    AppError::Auth("GOOGLE_CLIENT_SECRET not configured".to_string())
+                })?;
                 let redirect_uri = std::env::var("GOOGLE_REDIRECT_URI").unwrap_or_else(|_| {
                     "http://localhost:3000/api/v1/auth/gmail/callback".to_string()
                 });

@@ -46,11 +46,9 @@ pub struct AccountRow {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Read GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET from env.
-/// Returns None (and a 501 response) if not configured.
 fn get_oauth_config() -> Option<(String, String)> {
-    let client_id = std::env::var("GOOGLE_CLIENT_ID").ok()?;
-    let client_secret = std::env::var("GOOGLE_CLIENT_SECRET").ok()?;
+    let client_id = crate::auth::google_client_id()?;
+    let client_secret = crate::auth::google_client_secret()?;
     Some((client_id, client_secret))
 }
 
