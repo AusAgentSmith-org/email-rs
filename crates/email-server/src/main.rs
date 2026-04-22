@@ -33,6 +33,14 @@ fn main() -> anyhow::Result<()> {
     {
         let log_path = exe_log_path();
 
+        // Enforce single instance: if another copy is already running, bring its
+        // window to the foreground and exit cleanly rather than crashing with a
+        // port-conflict or WebView2 data-dir error.
+        let _instance_guard = match win_instance::acquire(&log_path) {
+            Some(g) => g,
+            None => return Ok(()),
+        };
+
         let panic_log = log_path.clone();
         std::panic::set_hook(Box::new(move |info| {
             win_log(&panic_log, &format!("panic: {info}"));
@@ -232,5 +240,85 @@ fn win_log(path: &std::path::Path, msg: &str) {
         .open(path)
     {
         let _ = f.write_all(line.as_bytes());
+    }
+}
+
+/// Single-instance enforcement via a named kernel mutex.
+///
+/// `acquire` returns `Some(guard)` for the first instance. All subsequent
+/// instances get `None` — the existing window is brought to the foreground
+/// before returning so the user sees the app immediately.
+///
+/// The guard must be kept alive for the entire process lifetime (binding it to
+/// `_instance_guard` in `main` is enough).
+#[cfg(target_os = "windows")]
+mod win_instance {
+    use std::ffi::c_void;
+
+    // Raw Win32 imports — kernel32 + user32 are always available on Windows.
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateMutexW(attrs: *const c_void, owner: u32, name: *const u16) -> *mut c_void;
+        fn GetLastError() -> u32;
+        fn CloseHandle(handle: *mut c_void) -> i32;
+    }
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn FindWindowW(class_name: *const u16, window_name: *const u16) -> *mut c_void;
+        fn IsIconic(hwnd: *mut c_void) -> i32;
+        fn ShowWindow(hwnd: *mut c_void, n_cmd_show: i32) -> i32;
+        fn SetForegroundWindow(hwnd: *mut c_void) -> i32;
+    }
+
+    const ERROR_ALREADY_EXISTS: u32 = 183;
+    const SW_RESTORE: i32 = 9;
+    const SW_SHOW: i32 = 5;
+
+    pub struct Guard(*mut c_void);
+
+    // Safety: the handle is only closed on drop; no other thread touches it.
+    unsafe impl Send for Guard {}
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            if !self.0.is_null() {
+                unsafe { CloseHandle(self.0) };
+            }
+        }
+    }
+
+    fn utf16(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    /// Try to become the single running instance.
+    /// Returns `Some(guard)` on success, `None` if another instance is running.
+    pub fn acquire(log: &std::path::Path) -> Option<Guard> {
+        let name = utf16("Local\\email-rs-singleton-v1");
+        let handle = unsafe { CreateMutexW(std::ptr::null(), 1, name.as_ptr()) };
+
+        if handle.is_null() || unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+            if !handle.is_null() {
+                unsafe { CloseHandle(handle) };
+            }
+            // Bring the existing window to the foreground.
+            let title = utf16("email-rs");
+            let hwnd = unsafe { FindWindowW(std::ptr::null(), title.as_ptr()) };
+            if !hwnd.is_null() {
+                unsafe {
+                    if IsIconic(hwnd) != 0 {
+                        ShowWindow(hwnd, SW_RESTORE);
+                    } else {
+                        ShowWindow(hwnd, SW_SHOW);
+                    }
+                    SetForegroundWindow(hwnd);
+                }
+            }
+            super::win_log(log, "another instance is already running — exiting");
+            return None;
+        }
+
+        Some(Guard(handle))
     }
 }

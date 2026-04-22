@@ -1,5 +1,7 @@
+use std::time::Duration;
+
 use sqlx::{
-    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
     SqlitePool,
 };
 
@@ -23,7 +25,10 @@ pub async fn create_pool(database_url: &str) -> anyhow::Result<(SqlitePool, bool
 
     let opts: SqliteConnectOptions = database_url
         .parse::<SqliteConnectOptions>()?
-        .create_if_missing(true);
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .busy_timeout(Duration::from_secs(5))
+        .foreign_keys(true);
 
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
