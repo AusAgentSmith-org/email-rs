@@ -40,3 +40,7 @@ dotenvy = "0.15"
 tray-icon = "0.19"
 tao = "0.30"
 wry = "0.47"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

@@ -171,3 +171,108 @@ impl OAuthConfig {
             .map_err(|e| AppError::Auth(format!("token parse error: {} — body: {}", e, body)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn token_expiring_in(offset_secs: i64) -> StoredToken {
+        StoredToken {
+            access_token: "tok".into(),
+            refresh_token: Some("ref".into()),
+            expires_at: Some(Utc::now().timestamp() + offset_secs),
+        }
+    }
+
+    #[test]
+    fn not_expired_when_no_expiry() {
+        let t = StoredToken {
+            access_token: "tok".into(),
+            refresh_token: None,
+            expires_at: None,
+        };
+        assert!(!t.is_expired());
+    }
+
+    #[test]
+    fn not_expired_when_far_future() {
+        assert!(!token_expiring_in(3600).is_expired());
+    }
+
+    #[test]
+    fn expired_when_past() {
+        assert!(token_expiring_in(-1).is_expired());
+    }
+
+    #[test]
+    fn expired_within_5_min_grace_window() {
+        // 4 minutes remaining is inside the 300s grace window → treat as expired
+        assert!(token_expiring_in(240).is_expired());
+    }
+
+    #[test]
+    fn not_expired_just_outside_grace_window() {
+        // 6 minutes remaining is outside the 300s window → still valid
+        assert!(!token_expiring_in(360).is_expired());
+    }
+
+    #[test]
+    fn from_token_response_computes_expires_at() {
+        let resp = TokenResponse {
+            access_token: "a".into(),
+            refresh_token: Some("r".into()),
+            expires_in: Some(3600),
+            token_type: "Bearer".into(),
+            scope: None,
+        };
+        let before = Utc::now().timestamp();
+        let stored = StoredToken::from_token_response(resp);
+        let after = Utc::now().timestamp();
+        let exp = stored.expires_at.unwrap();
+        assert!(exp >= before + 3600 && exp <= after + 3600);
+    }
+
+    #[test]
+    fn from_token_response_no_expiry_when_expires_in_missing() {
+        let resp = TokenResponse {
+            access_token: "a".into(),
+            refresh_token: None,
+            expires_in: None,
+            token_type: "Bearer".into(),
+            scope: None,
+        };
+        assert!(StoredToken::from_token_response(resp).expires_at.is_none());
+    }
+
+    #[test]
+    fn gmail_auth_url_includes_required_params() {
+        let cfg = OAuthConfig::gmail("my-cid".into(), "sec".into(), "http://localhost/cb".into());
+        let url = cfg.authorization_url("state123");
+        assert!(url.starts_with("https://accounts.google.com/o/oauth2/v2/auth?"));
+        assert!(url.contains("client_id=my-cid"));
+        assert!(url.contains("response_type=code"));
+        assert!(url.contains("access_type=offline"));
+        assert!(url.contains("state=state123"));
+        assert!(url.contains("prompt=consent"));
+    }
+
+    #[test]
+    fn microsoft_auth_url_omits_access_type() {
+        let cfg =
+            OAuthConfig::microsoft("ms-cid".into(), "sec".into(), "http://localhost/cb".into());
+        let url = cfg.authorization_url_microsoft("st456");
+        assert!(url.starts_with("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?"));
+        assert!(!url.contains("access_type"));
+        assert!(url.contains("client_id=ms-cid"));
+        assert!(url.contains("state=st456"));
+    }
+
+    #[test]
+    fn state_with_special_chars_is_url_encoded() {
+        let cfg = OAuthConfig::gmail("id".into(), "sec".into(), "http://localhost/cb".into());
+        let url = cfg.authorization_url("has spaces&symbols");
+        // Raw unencoded string must not appear
+        assert!(!url.contains("has spaces&symbols"));
+    }
+}

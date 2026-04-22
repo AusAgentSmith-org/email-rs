@@ -88,3 +88,306 @@ pub async fn list_folders(
 
     Ok(Json(rows))
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use http_body_util::BodyExt;
+    use sqlx::SqlitePool;
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    async fn setup() -> Arc<crate::state::AppState> {
+        let path = format!("/tmp/email_test_{}.db", uuid::Uuid::new_v4());
+        let (pool, has_fts) = crate::db::create_pool(&format!("sqlite:{path}"))
+            .await
+            .unwrap();
+        Arc::new(crate::state::AppState::new(pool, has_fts))
+    }
+
+    async fn seed_account(pool: &SqlitePool, id: &str) {
+        sqlx::query(
+            "INSERT INTO accounts (id, name, email, provider_type, auth_type) VALUES (?,?,?,?,?)",
+        )
+        .bind(id)
+        .bind("T")
+        .bind("t@t.com")
+        .bind("generic_imap")
+        .bind("password")
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn seed_folder(
+        pool: &SqlitePool,
+        id: &str,
+        account_id: &str,
+        name: &str,
+        full_path: &str,
+        special_use: Option<&str>,
+    ) {
+        sqlx::query(
+            "INSERT INTO folders (id, account_id, name, full_path, special_use) VALUES (?,?,?,?,?)",
+        )
+        .bind(id)
+        .bind(account_id)
+        .bind(name)
+        .bind(full_path)
+        .bind(special_use)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn req(
+        router: axum::Router,
+        method: &str,
+        uri: &str,
+        body: Option<serde_json::Value>,
+    ) -> (StatusCode, serde_json::Value) {
+        let body = match body {
+            Some(v) => Body::from(serde_json::to_vec(&v).unwrap()),
+            None => Body::empty(),
+        };
+        let request = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(body)
+            .unwrap();
+        let resp = router.oneshot(request).await.unwrap();
+        let status = resp.status();
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+        (status, json)
+    }
+
+    #[tokio::test]
+    async fn list_folders_empty() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        let (status, body) = req(
+            crate::api::router(state),
+            "GET",
+            "/accounts/acc1/folders",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn list_folders_ordered_by_special_use() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(
+            &state.pool,
+            "fld-trash",
+            "acc1",
+            "Trash",
+            "Trash",
+            Some("trash"),
+        )
+        .await;
+        seed_folder(
+            &state.pool,
+            "fld-inbox",
+            "acc1",
+            "INBOX",
+            "INBOX",
+            Some("inbox"),
+        )
+        .await;
+        seed_folder(
+            &state.pool,
+            "fld-sent",
+            "acc1",
+            "Sent",
+            "Sent",
+            Some("sent"),
+        )
+        .await;
+
+        let (status, body) = req(
+            crate::api::router(state),
+            "GET",
+            "/accounts/acc1/folders",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let arr = body.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[0]["id"], "fld-inbox");
+        assert_eq!(arr[1]["id"], "fld-sent");
+        assert_eq!(arr[2]["id"], "fld-trash");
+    }
+
+    #[tokio::test]
+    async fn list_folders_null_special_use_comes_last() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld-custom", "acc1", "Lists", "Lists", None).await;
+        seed_folder(
+            &state.pool,
+            "fld-inbox",
+            "acc1",
+            "INBOX",
+            "INBOX",
+            Some("inbox"),
+        )
+        .await;
+
+        let (_, body) = req(
+            crate::api::router(state),
+            "GET",
+            "/accounts/acc1/folders",
+            None,
+        )
+        .await;
+        let arr = body.as_array().unwrap();
+        assert_eq!(arr[0]["id"], "fld-inbox");
+        assert_eq!(arr[1]["id"], "fld-custom");
+    }
+
+    #[tokio::test]
+    async fn mark_folder_read_updates_all_messages() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", "INBOX", "INBOX", None).await;
+        for i in 0..3 {
+            sqlx::query(
+                "INSERT INTO messages (id, account_id, folder_id, uid, message_id, is_read) VALUES (?,?,?,?,?,?)",
+            )
+            .bind(format!("mr-msg-{}", i))
+            .bind("acc1")
+            .bind("fld1")
+            .bind(i as i64)
+            .bind(format!("<id{}>", i))
+            .bind(false)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        }
+
+        let (status, body) = req(
+            crate::api::router(Arc::clone(&state)),
+            "POST",
+            "/folders/fld1/mark-read",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["updated"], 3);
+
+        let unread: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM messages WHERE folder_id = 'fld1' AND is_read = 0",
+        )
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
+        assert_eq!(unread, 0);
+    }
+
+    #[tokio::test]
+    async fn mark_folder_read_empty_folder_returns_zero() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", "INBOX", "INBOX", None).await;
+
+        let (status, body) = req(
+            crate::api::router(state),
+            "POST",
+            "/folders/fld1/mark-read",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["updated"], 0);
+    }
+
+    #[tokio::test]
+    async fn patch_folder_sets_excluded() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", "Promos", "Promos", None).await;
+
+        let (status, _) = req(
+            crate::api::router(Arc::clone(&state)),
+            "PATCH",
+            "/folders/fld1",
+            Some(serde_json::json!({"isExcluded": true})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let excluded: bool =
+            sqlx::query_scalar("SELECT is_excluded FROM folders WHERE id = 'fld1'")
+                .fetch_one(&state.pool)
+                .await
+                .unwrap();
+        assert!(excluded);
+    }
+
+    #[tokio::test]
+    async fn patch_folder_clears_excluded() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", "Spam", "Spam", None).await;
+        sqlx::query("UPDATE folders SET is_excluded = 1 WHERE id = 'fld1'")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        req(
+            crate::api::router(Arc::clone(&state)),
+            "PATCH",
+            "/folders/fld1",
+            Some(serde_json::json!({"isExcluded": false})),
+        )
+        .await;
+
+        let excluded: bool =
+            sqlx::query_scalar("SELECT is_excluded FROM folders WHERE id = 'fld1'")
+                .fetch_one(&state.pool)
+                .await
+                .unwrap();
+        assert!(!excluded);
+    }
+
+    #[tokio::test]
+    async fn patch_nonexistent_folder_is_404() {
+        let state = setup().await;
+        let (status, _) = req(
+            crate::api::router(state),
+            "PATCH",
+            "/folders/ghost",
+            Some(serde_json::json!({"isExcluded": true})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn list_folders_only_shows_account_folders() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_account(&state.pool, "acc2").await;
+        seed_folder(&state.pool, "f1", "acc1", "INBOX", "INBOX", Some("inbox")).await;
+        seed_folder(&state.pool, "f2", "acc2", "INBOX", "INBOX", Some("inbox")).await;
+
+        let (_, body) = req(
+            crate::api::router(state),
+            "GET",
+            "/accounts/acc1/folders",
+            None,
+        )
+        .await;
+        let arr = body.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["id"], "f1");
+    }
+}

@@ -579,3 +579,536 @@ pub async fn get_message(
 
     Ok(Json(result))
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use http_body_util::BodyExt;
+    use sqlx::SqlitePool;
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    async fn setup() -> Arc<crate::state::AppState> {
+        let path = format!("/tmp/email_test_{}.db", uuid::Uuid::new_v4());
+        let (pool, has_fts) = crate::db::create_pool(&format!("sqlite:{path}"))
+            .await
+            .unwrap();
+        Arc::new(crate::state::AppState::new(pool, has_fts))
+    }
+
+    async fn seed_account(pool: &SqlitePool, id: &str) {
+        sqlx::query(
+            "INSERT INTO accounts (id, name, email, provider_type, auth_type) VALUES (?,?,?,?,?)",
+        )
+        .bind(id)
+        .bind("T")
+        .bind("t@t.com")
+        .bind("generic_imap")
+        .bind("password")
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn seed_folder(pool: &SqlitePool, id: &str, account_id: &str, special_use: Option<&str>) {
+        sqlx::query(
+            "INSERT INTO folders (id, account_id, name, full_path, special_use) VALUES (?,?,?,?,?)",
+        )
+        // Use `id` as full_path so sibling folders don't collide on the UNIQUE(account_id, full_path) constraint.
+        .bind(id)
+        .bind(account_id)
+        .bind(id)
+        .bind(id)
+        .bind(special_use)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn seed_message(pool: &SqlitePool, id: &str, account_id: &str, folder_id: &str) {
+        sqlx::query(
+            "INSERT INTO messages (id, account_id, folder_id, uid, message_id, subject, is_read) VALUES (?,?,?,?,?,?,?)",
+        )
+        .bind(id)
+        .bind(account_id)
+        .bind(folder_id)
+        .bind(1i64)
+        .bind(format!("<{id}>"))
+        .bind(format!("Subject of {id}"))
+        .bind(false)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn req(
+        router: axum::Router,
+        method: &str,
+        uri: &str,
+        body: Option<serde_json::Value>,
+    ) -> (StatusCode, serde_json::Value) {
+        let body = match body {
+            Some(v) => Body::from(serde_json::to_vec(&v).unwrap()),
+            None => Body::empty(),
+        };
+        let request = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(body)
+            .unwrap();
+        let resp = router.oneshot(request).await.unwrap();
+        let status = resp.status();
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+        (status, json)
+    }
+
+    #[tokio::test]
+    async fn list_messages_empty_folder() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        let (status, body) = req(
+            crate::api::router(state),
+            "GET",
+            "/folders/fld1/messages",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn list_messages_returns_all() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "msg1", "acc1", "fld1").await;
+        seed_message(&state.pool, "msg2", "acc1", "fld1").await;
+        let (status, body) = req(
+            crate::api::router(state),
+            "GET",
+            "/folders/fld1/messages",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body.as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn list_messages_unread_filter() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "unread-msg", "acc1", "fld1").await;
+        seed_message(&state.pool, "read-msg", "acc1", "fld1").await;
+        sqlx::query("UPDATE messages SET is_read = 1 WHERE id = 'read-msg'")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        let (status, body) = req(
+            crate::api::router(state),
+            "GET",
+            "/folders/fld1/messages?unread_only=true",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let arr = body.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["id"], "unread-msg");
+    }
+
+    #[tokio::test]
+    async fn list_messages_pagination() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        for i in 0..5 {
+            seed_message(&state.pool, &format!("pg-{}", i), "acc1", "fld1").await;
+        }
+        let (status, body) = req(
+            crate::api::router(state),
+            "GET",
+            "/folders/fld1/messages?per_page=2&page=1",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body.as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn list_messages_page_2() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        for i in 0..5 {
+            seed_message(&state.pool, &format!("p2-{}", i), "acc1", "fld1").await;
+        }
+        let (status, body) = req(
+            crate::api::router(state),
+            "GET",
+            "/folders/fld1/messages?per_page=3&page=2",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body.as_array().unwrap().len(), 2); // 5 total, first page has 3, second has 2
+    }
+
+    #[tokio::test]
+    async fn get_message_returns_content() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "msg-get", "acc1", "fld1").await;
+
+        let (status, body) = req(
+            crate::api::router(Arc::clone(&state)),
+            "GET",
+            "/messages/msg-get",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["id"], "msg-get");
+        assert_eq!(body["subject"], "Subject of msg-get");
+    }
+
+    #[tokio::test]
+    async fn get_message_marks_read_in_db() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "msg-read", "acc1", "fld1").await;
+
+        req(
+            crate::api::router(Arc::clone(&state)),
+            "GET",
+            "/messages/msg-read",
+            None,
+        )
+        .await;
+
+        let is_read: bool =
+            sqlx::query_scalar("SELECT is_read FROM messages WHERE id = 'msg-read'")
+                .fetch_one(&state.pool)
+                .await
+                .unwrap();
+        assert!(is_read);
+    }
+
+    #[tokio::test]
+    async fn get_message_response_has_is_read_true() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "msg-ir", "acc1", "fld1").await;
+
+        let (_, body) = req(crate::api::router(state), "GET", "/messages/msg-ir", None).await;
+        assert_eq!(body["isRead"], true);
+    }
+
+    #[tokio::test]
+    async fn get_nonexistent_message_is_404() {
+        let state = setup().await;
+        let (status, _) = req(crate::api::router(state), "GET", "/messages/ghost", None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn patch_message_marks_read() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "pm1", "acc1", "fld1").await;
+
+        let (status, body) = req(
+            crate::api::router(Arc::clone(&state)),
+            "PATCH",
+            "/messages/pm1",
+            Some(serde_json::json!({"isRead": true})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "ok");
+
+        let is_read: bool = sqlx::query_scalar("SELECT is_read FROM messages WHERE id = 'pm1'")
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
+        assert!(is_read);
+    }
+
+    #[tokio::test]
+    async fn patch_message_marks_unread() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "pm2", "acc1", "fld1").await;
+        sqlx::query("UPDATE messages SET is_read = 1 WHERE id = 'pm2'")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        req(
+            crate::api::router(Arc::clone(&state)),
+            "PATCH",
+            "/messages/pm2",
+            Some(serde_json::json!({"isRead": false})),
+        )
+        .await;
+
+        let is_read: bool = sqlx::query_scalar("SELECT is_read FROM messages WHERE id = 'pm2'")
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
+        assert!(!is_read);
+    }
+
+    #[tokio::test]
+    async fn patch_message_sets_flagged() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "pm3", "acc1", "fld1").await;
+
+        req(
+            crate::api::router(Arc::clone(&state)),
+            "PATCH",
+            "/messages/pm3",
+            Some(serde_json::json!({"isFlagged": true})),
+        )
+        .await;
+
+        let is_flagged: bool =
+            sqlx::query_scalar("SELECT is_flagged FROM messages WHERE id = 'pm3'")
+                .fetch_one(&state.pool)
+                .await
+                .unwrap();
+        assert!(is_flagged);
+    }
+
+    #[tokio::test]
+    async fn patch_message_clears_flagged() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "pm4", "acc1", "fld1").await;
+        sqlx::query("UPDATE messages SET is_flagged = 1 WHERE id = 'pm4'")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        req(
+            crate::api::router(Arc::clone(&state)),
+            "PATCH",
+            "/messages/pm4",
+            Some(serde_json::json!({"isFlagged": false})),
+        )
+        .await;
+
+        let is_flagged: bool =
+            sqlx::query_scalar("SELECT is_flagged FROM messages WHERE id = 'pm4'")
+                .fetch_one(&state.pool)
+                .await
+                .unwrap();
+        assert!(!is_flagged);
+    }
+
+    #[tokio::test]
+    async fn delete_message_removes_from_db() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "del-msg", "acc1", "fld1").await;
+
+        let (status, body) = req(
+            crate::api::router(Arc::clone(&state)),
+            "DELETE",
+            "/messages/del-msg",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "response body: {body}");
+        assert_eq!(body["status"], "deleted");
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE id = 'del-msg'")
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn archive_without_archive_folder_deletes_message() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld-inbox", "acc1", Some("inbox")).await;
+        seed_message(&state.pool, "arch-msg", "acc1", "fld-inbox").await;
+
+        let (status, body) = req(
+            crate::api::router(Arc::clone(&state)),
+            "POST",
+            "/messages/arch-msg/archive",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "archived");
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE id = 'arch-msg'")
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn archive_with_archive_folder_moves_message() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld-inbox", "acc1", Some("inbox")).await;
+        seed_folder(&state.pool, "fld-archive", "acc1", Some("archive")).await;
+        seed_message(&state.pool, "mv-msg", "acc1", "fld-inbox").await;
+
+        let (status, _) = req(
+            crate::api::router(Arc::clone(&state)),
+            "POST",
+            "/messages/mv-msg/archive",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let folder_id: String =
+            sqlx::query_scalar("SELECT folder_id FROM messages WHERE id = 'mv-msg'")
+                .fetch_one(&state.pool)
+                .await
+                .unwrap();
+        assert_eq!(folder_id, "fld-archive");
+    }
+
+    #[tokio::test]
+    async fn bulk_mark_read() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "bm1", "acc1", "fld1").await;
+        seed_message(&state.pool, "bm2", "acc1", "fld1").await;
+
+        let (status, body) = req(
+            crate::api::router(Arc::clone(&state)),
+            "POST",
+            "/messages/bulk",
+            Some(serde_json::json!({"ids": ["bm1", "bm2"], "action": "mark_read"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["processed"], 2);
+
+        let unread: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM messages WHERE id IN ('bm1','bm2') AND is_read = 0",
+        )
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
+        assert_eq!(unread, 0);
+    }
+
+    #[tokio::test]
+    async fn bulk_mark_unread() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "bu1", "acc1", "fld1").await;
+        sqlx::query("UPDATE messages SET is_read = 1 WHERE id = 'bu1'")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+
+        req(
+            crate::api::router(Arc::clone(&state)),
+            "POST",
+            "/messages/bulk",
+            Some(serde_json::json!({"ids": ["bu1"], "action": "mark_unread"})),
+        )
+        .await;
+
+        let is_read: bool = sqlx::query_scalar("SELECT is_read FROM messages WHERE id = 'bu1'")
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
+        assert!(!is_read);
+    }
+
+    #[tokio::test]
+    async fn bulk_delete() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", None).await;
+        seed_message(&state.pool, "bd1", "acc1", "fld1").await;
+        seed_message(&state.pool, "bd2", "acc1", "fld1").await;
+
+        let (status, body) = req(
+            crate::api::router(Arc::clone(&state)),
+            "POST",
+            "/messages/bulk",
+            Some(serde_json::json!({"ids": ["bd1", "bd2"], "action": "delete"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["processed"], 2);
+
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE id IN ('bd1','bd2')")
+                .fetch_one(&state.pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn bulk_archive_without_archive_folder_deletes() {
+        let state = setup().await;
+        seed_account(&state.pool, "acc1").await;
+        seed_folder(&state.pool, "fld1", "acc1", Some("inbox")).await;
+        seed_message(&state.pool, "ba1", "acc1", "fld1").await;
+        seed_message(&state.pool, "ba2", "acc1", "fld1").await;
+
+        req(
+            crate::api::router(Arc::clone(&state)),
+            "POST",
+            "/messages/bulk",
+            Some(serde_json::json!({"ids": ["ba1", "ba2"], "action": "archive"})),
+        )
+        .await;
+
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE id IN ('ba1','ba2')")
+                .fetch_one(&state.pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn bulk_empty_ids_processes_zero() {
+        let state = setup().await;
+        let (status, body) = req(
+            crate::api::router(state),
+            "POST",
+            "/messages/bulk",
+            Some(serde_json::json!({"ids": [], "action": "mark_read"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["processed"], 0);
+    }
+}

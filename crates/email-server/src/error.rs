@@ -48,3 +48,80 @@ impl IntoResponse for AppError {
 }
 
 pub type Result<T> = std::result::Result<T, AppError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    fn status_of(err: AppError) -> StatusCode {
+        err.into_response().status()
+    }
+
+    #[test]
+    fn not_found_is_404() {
+        assert_eq!(
+            status_of(AppError::NotFound("x".into())),
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[test]
+    fn auth_is_401() {
+        assert_eq!(
+            status_of(AppError::Auth("x".into())),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[test]
+    fn provider_is_502() {
+        assert_eq!(
+            status_of(AppError::Provider("x".into())),
+            StatusCode::BAD_GATEWAY
+        );
+    }
+
+    #[test]
+    fn imap_is_502() {
+        assert_eq!(
+            status_of(AppError::Imap("x".into())),
+            StatusCode::BAD_GATEWAY
+        );
+    }
+
+    #[test]
+    fn smtp_is_502() {
+        assert_eq!(
+            status_of(AppError::Smtp("x".into())),
+            StatusCode::BAD_GATEWAY
+        );
+    }
+
+    #[test]
+    fn internal_is_500() {
+        assert_eq!(
+            status_of(AppError::Internal(anyhow::anyhow!("boom"))),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[tokio::test]
+    async fn response_body_has_error_key() {
+        use http_body_util::BodyExt;
+        let resp = AppError::NotFound("thing not found".into()).into_response();
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["error"], "thing not found");
+    }
+
+    #[tokio::test]
+    async fn auth_error_body_contains_message() {
+        use http_body_util::BodyExt;
+        let resp = AppError::Auth("invalid token".into()).into_response();
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["error"], "invalid token");
+    }
+}

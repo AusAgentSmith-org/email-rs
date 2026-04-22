@@ -246,3 +246,400 @@ pub async fn suggest_messages(
 
     Ok(Json(rows))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{fts_prefix_query, fts_query};
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use http_body_util::BodyExt;
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    // ── fts_query unit tests ─────────────────────────────────────────────────────
+
+    #[test]
+    fn fts_query_single_word() {
+        assert_eq!(fts_query("hello"), "\"hello\"");
+    }
+
+    #[test]
+    fn fts_query_multiple_words() {
+        assert_eq!(fts_query("hello world"), "\"hello\" \"world\"");
+    }
+
+    #[test]
+    fn fts_query_empty_input() {
+        assert_eq!(fts_query(""), "");
+    }
+
+    #[test]
+    fn fts_query_collapses_whitespace() {
+        assert_eq!(fts_query("  hello   world  "), "\"hello\" \"world\"");
+    }
+
+    #[test]
+    fn fts_query_escapes_embedded_double_quotes() {
+        assert_eq!(fts_query("hel\"lo"), "\"hel\"\"lo\"");
+    }
+
+    #[test]
+    fn fts_prefix_query_single_word_appends_star() {
+        assert_eq!(fts_prefix_query("hell"), "\"hell\"*");
+    }
+
+    #[test]
+    fn fts_prefix_query_multi_word_star_on_last_only() {
+        assert_eq!(fts_prefix_query("hello wor"), "\"hello\" \"wor\"*");
+    }
+
+    #[test]
+    fn fts_prefix_query_empty_returns_empty() {
+        assert_eq!(fts_prefix_query(""), "");
+    }
+
+    #[test]
+    fn fts_prefix_query_three_words() {
+        assert_eq!(fts_prefix_query("a b c"), "\"a\" \"b\" \"c\"*");
+    }
+
+    #[test]
+    fn fts_prefix_query_escapes_quotes_in_last_word() {
+        assert_eq!(fts_prefix_query("he\"l"), "\"he\"\"l\"*");
+    }
+
+    // ── Integration tests (in-memory SQLite) ────────────────────────────────────
+
+    async fn make_state(with_fts: bool) -> Arc<crate::state::AppState> {
+        let path = format!("/tmp/email_test_{}.db", uuid::Uuid::new_v4());
+        let (pool, has_fts) = crate::db::create_pool(&format!("sqlite:{path}"))
+            .await
+            .unwrap();
+        Arc::new(crate::state::AppState::new(pool, has_fts && with_fts))
+    }
+
+    async fn seed(
+        pool: &sqlx::SqlitePool,
+        id: &str,
+        account_id: &str,
+        folder_id: &str,
+        subject: &str,
+        from_email: &str,
+        from_name: &str,
+        preview: &str,
+    ) {
+        let _ = sqlx::query(
+            "INSERT OR IGNORE INTO accounts (id, name, email, provider_type, auth_type) VALUES (?,?,?,?,?)",
+        )
+        .bind(account_id)
+        .bind("Test")
+        .bind("t@test.com")
+        .bind("generic_imap")
+        .bind("password")
+        .execute(pool)
+        .await;
+        let _ = sqlx::query(
+            "INSERT OR IGNORE INTO folders (id, account_id, name, full_path) VALUES (?,?,?,?)",
+        )
+        .bind(folder_id)
+        .bind(account_id)
+        .bind("INBOX")
+        .bind("INBOX")
+        .execute(pool)
+        .await;
+        sqlx::query(
+            "INSERT INTO messages (id, account_id, folder_id, uid, subject, from_email, from_name, preview, message_id) VALUES (?,?,?,?,?,?,?,?,?)",
+        )
+        .bind(id)
+        .bind(account_id)
+        .bind(folder_id)
+        .bind(1i64)
+        .bind(subject)
+        .bind(from_email)
+        .bind(from_name)
+        .bind(preview)
+        .bind(format!("<{id}>"))
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn do_get(router: axum::Router, uri: &str) -> (StatusCode, serde_json::Value) {
+        let req = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .body(Body::empty())
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        let status = resp.status();
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+        (status, json)
+    }
+
+    #[tokio::test]
+    async fn search_empty_query_returns_empty() {
+        let state = make_state(true).await;
+        let (status, body) = do_get(crate::api::router(state), "/search?q=").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn search_whitespace_only_returns_empty() {
+        let state = make_state(true).await;
+        let (status, body) = do_get(crate::api::router(state), "/search?q=%20%20").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn search_fts_finds_by_subject() {
+        let state = make_state(true).await;
+        seed(
+            &state.pool,
+            "m1",
+            "acc1",
+            "fld1",
+            "Meeting tomorrow at noon",
+            "alice@example.com",
+            "Alice",
+            "",
+        )
+        .await;
+        let (status, body) = do_get(crate::api::router(state), "/search?q=tomorrow").await;
+        assert_eq!(status, StatusCode::OK);
+        let arr = body.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["id"], "m1");
+    }
+
+    #[tokio::test]
+    async fn search_fts_finds_by_from_email() {
+        let state = make_state(true).await;
+        seed(
+            &state.pool,
+            "m2",
+            "acc1",
+            "fld1",
+            "Hello",
+            "bob@company.com",
+            "Bob",
+            "preview",
+        )
+        .await;
+        let (status, body) = do_get(crate::api::router(state), "/search?q=bob%40company.com").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.as_array().unwrap().iter().any(|m| m["id"] == "m2"));
+    }
+
+    #[tokio::test]
+    async fn search_fts_no_match_returns_empty() {
+        let state = make_state(true).await;
+        seed(
+            &state.pool,
+            "m3",
+            "acc1",
+            "fld1",
+            "Weekly report",
+            "alice@example.com",
+            "Alice",
+            "",
+        )
+        .await;
+        let (status, body) = do_get(crate::api::router(state), "/search?q=xyznonexistent").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body.as_array().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn search_fts_filtered_by_account_id() {
+        let state = make_state(true).await;
+        seed(
+            &state.pool,
+            "ma1",
+            "acca",
+            "flda",
+            "Project update",
+            "x@x.com",
+            "X",
+            "",
+        )
+        .await;
+        seed(
+            &state.pool,
+            "mb1",
+            "accb",
+            "fldb",
+            "Project update",
+            "y@y.com",
+            "Y",
+            "",
+        )
+        .await;
+        let (status, body) = do_get(
+            crate::api::router(state),
+            "/search?q=Project&account_id=acca",
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let arr = body.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["id"], "ma1");
+    }
+
+    #[tokio::test]
+    async fn search_fts_finds_by_preview() {
+        let state = make_state(true).await;
+        seed(
+            &state.pool,
+            "m4",
+            "acc1",
+            "fld1",
+            "No clue",
+            "a@b.com",
+            "A",
+            "urgent action required",
+        )
+        .await;
+        let (status, body) = do_get(crate::api::router(state), "/search?q=urgent").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.as_array().unwrap().iter().any(|m| m["id"] == "m4"));
+    }
+
+    #[tokio::test]
+    async fn search_like_fallback_finds_by_subject() {
+        let state = make_state(false).await;
+        seed(
+            &state.pool,
+            "ml1",
+            "acc1",
+            "fld1",
+            "Invoice for services",
+            "vendor@example.com",
+            "Vendor",
+            "details",
+        )
+        .await;
+        let (status, body) = do_get(crate::api::router(state), "/search?q=Invoice").await;
+        assert_eq!(status, StatusCode::OK);
+        let arr = body.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["id"], "ml1");
+    }
+
+    #[tokio::test]
+    async fn search_like_fallback_filtered_by_account_id() {
+        let state = make_state(false).await;
+        seed(
+            &state.pool,
+            "lka",
+            "acca",
+            "flda",
+            "Budget 2025",
+            "x@x.com",
+            "X",
+            "",
+        )
+        .await;
+        seed(
+            &state.pool,
+            "lkb",
+            "accb",
+            "fldb",
+            "Budget 2025",
+            "y@y.com",
+            "Y",
+            "",
+        )
+        .await;
+        let (status, body) = do_get(
+            crate::api::router(state),
+            "/search?q=Budget&account_id=accb",
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let arr = body.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["id"], "lkb");
+    }
+
+    #[tokio::test]
+    async fn suggest_too_short_returns_empty() {
+        let state = make_state(true).await;
+        let (status, body) = do_get(crate::api::router(state), "/search/suggest?q=a").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn suggest_fts_prefix_matches_multiple() {
+        let state = make_state(true).await;
+        seed(
+            &state.pool,
+            "s1",
+            "acc1",
+            "fld1",
+            "Quarterly review",
+            "mgr@corp.com",
+            "Manager",
+            "",
+        )
+        .await;
+        seed(
+            &state.pool,
+            "s2",
+            "acc1",
+            "fld1",
+            "Quarter budget",
+            "fin@corp.com",
+            "Finance",
+            "",
+        )
+        .await;
+        let (status, body) = do_get(crate::api::router(state), "/search/suggest?q=Quar").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body.as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn suggest_fts_capped_at_8_results() {
+        let state = make_state(true).await;
+        for i in 0..10 {
+            seed(
+                &state.pool,
+                &format!("sg{}", i),
+                "acc1",
+                "fld1",
+                &format!("Newsletter issue {}", i),
+                "news@x.com",
+                "News",
+                "",
+            )
+            .await;
+        }
+        let (status, body) =
+            do_get(crate::api::router(state), "/search/suggest?q=Newsletter").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.as_array().unwrap().len() <= 8);
+    }
+
+    #[tokio::test]
+    async fn suggest_like_fallback_returns_matches() {
+        let state = make_state(false).await;
+        seed(
+            &state.pool,
+            "sl1",
+            "acc1",
+            "fld1",
+            "Newsletter issue 42",
+            "news@example.com",
+            "News",
+            "",
+        )
+        .await;
+        let (status, body) = do_get(crate::api::router(state), "/search/suggest?q=News").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.as_array().unwrap().iter().any(|m| m["id"] == "sl1"));
+    }
+}

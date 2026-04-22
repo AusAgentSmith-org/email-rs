@@ -23,15 +23,25 @@ pub async fn create_pool(database_url: &str) -> anyhow::Result<(SqlitePool, bool
         }
     }
 
+    // WAL mode is not supported for in-memory databases; use Memory journal instead.
+    let journal_mode = if file_path == ":memory:" {
+        SqliteJournalMode::Memory
+    } else {
+        SqliteJournalMode::Wal
+    };
+
     let opts: SqliteConnectOptions = database_url
         .parse::<SqliteConnectOptions>()?
         .create_if_missing(true)
-        .journal_mode(SqliteJournalMode::Wal)
+        .journal_mode(journal_mode)
         .busy_timeout(Duration::from_secs(5))
         .foreign_keys(true);
 
+    // In-memory databases are per-connection in SQLite: limit to 1 connection so all
+    // operations share the same database rather than each getting an empty one.
+    let max_conns = if file_path == ":memory:" { 1 } else { 5 };
     let pool = SqlitePoolOptions::new()
-        .max_connections(5)
+        .max_connections(max_conns)
         .connect_with(opts)
         .await?;
 
@@ -149,8 +159,8 @@ async fn run_fts_migration(pool: &SqlitePool) -> anyhow::Result<()> {
     sqlx::query(
         "CREATE TRIGGER IF NOT EXISTS messages_fts_ai
          AFTER INSERT ON messages BEGIN
-           INSERT INTO messages_fts(message_id, subject, from_name, from_email, preview)
-           VALUES (new.id,
+           INSERT INTO messages_fts(rowid, message_id, subject, from_name, from_email, preview)
+           VALUES (new.rowid, new.id,
                    coalesce(new.subject,   ''),
                    coalesce(new.from_name, ''),
                    coalesce(new.from_email,''),
@@ -163,12 +173,7 @@ async fn run_fts_migration(pool: &SqlitePool) -> anyhow::Result<()> {
     sqlx::query(
         "CREATE TRIGGER IF NOT EXISTS messages_fts_ad
          AFTER DELETE ON messages BEGIN
-           INSERT INTO messages_fts(messages_fts, message_id, subject, from_name, from_email, preview)
-           VALUES ('delete', old.id,
-                   coalesce(old.subject,   ''),
-                   coalesce(old.from_name, ''),
-                   coalesce(old.from_email,''),
-                   coalesce(old.preview,   ''));
+           DELETE FROM messages_fts WHERE rowid = old.rowid;
          END",
     )
     .execute(pool)
@@ -177,14 +182,9 @@ async fn run_fts_migration(pool: &SqlitePool) -> anyhow::Result<()> {
     sqlx::query(
         "CREATE TRIGGER IF NOT EXISTS messages_fts_au
          AFTER UPDATE OF subject, from_name, from_email, preview ON messages BEGIN
-           INSERT INTO messages_fts(messages_fts, message_id, subject, from_name, from_email, preview)
-           VALUES ('delete', old.id,
-                   coalesce(old.subject,   ''),
-                   coalesce(old.from_name, ''),
-                   coalesce(old.from_email,''),
-                   coalesce(old.preview,   ''));
-           INSERT INTO messages_fts(message_id, subject, from_name, from_email, preview)
-           VALUES (new.id,
+           DELETE FROM messages_fts WHERE rowid = old.rowid;
+           INSERT INTO messages_fts(rowid, message_id, subject, from_name, from_email, preview)
+           VALUES (new.rowid, new.id,
                    coalesce(new.subject,   ''),
                    coalesce(new.from_name, ''),
                    coalesce(new.from_email,''),
@@ -196,8 +196,9 @@ async fn run_fts_migration(pool: &SqlitePool) -> anyhow::Result<()> {
 
     // Backfill any messages not yet in the index (idempotent).
     sqlx::query(
-        "INSERT INTO messages_fts(message_id, subject, from_name, from_email, preview)
-         SELECT id,
+        "INSERT INTO messages_fts(rowid, message_id, subject, from_name, from_email, preview)
+         SELECT rowid,
+                id,
                 coalesce(subject,   ''),
                 coalesce(from_name, ''),
                 coalesce(from_email,''),
