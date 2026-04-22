@@ -306,9 +306,19 @@ export function AddAccountModal({ onClose, onAccountAdded }: AddAccountModalProp
     setOauthError(null);
     try {
       const res = await fetch(path);
+      if (!res.ok) {
+        let msg = `OAuth not available (HTTP ${res.status})`;
+        try {
+          const data = (await res.json()) as { error?: string };
+          if (data.error) msg = data.error;
+        } catch { /* empty body or non-JSON error response */ }
+        setOauthError(msg);
+        done(false);
+        return;
+      }
       const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !data.url) {
-        setOauthError(data.error ?? `OAuth not available (HTTP ${res.status})`);
+      if (!data.url) {
+        setOauthError(data.error ?? 'OAuth not available');
         done(false);
         return;
       }
