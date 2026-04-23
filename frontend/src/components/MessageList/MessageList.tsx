@@ -81,6 +81,7 @@ export function MessageList() {
     selectedMessageId,
     setSelectedMessage,
     folders,
+    labels,
     searchQuery,
     conditionGroup,
     folderSelectSeq,
@@ -101,15 +102,22 @@ export function MessageList() {
 
   const isSmartFolder = !!selectedFolderId?.startsWith('smart:');
   const smartKind = isSmartFolder ? selectedFolderId!.replace('smart:', '') : '';
+  const isLabelFolder = !!selectedFolderId?.startsWith('label:');
+  const labelFolderId = isLabelFolder ? selectedFolderId!.replace('label:', '') : '';
   const isSearching = !!searchQuery.trim();
   const advancedSearchUrl = conditionGroup ? conditionGroupToSearchUrl(conditionGroup) : '';
   const isAdvancedSearching = !!advancedSearchUrl;
 
   const { data: folderMessages, loading: folderLoading, refetch } = useApi<Message[]>(
-    selectedFolderId && !searchQuery && !isSmartFolder && !isAdvancedSearching
+    selectedFolderId && !searchQuery && !isSmartFolder && !isLabelFolder && !isAdvancedSearching
       ? `/api/v1/folders/${selectedFolderId}/messages`
       : '',
-    { immediate: !!selectedFolderId && !searchQuery && !isSmartFolder && !isAdvancedSearching },
+    { immediate: !!selectedFolderId && !searchQuery && !isSmartFolder && !isLabelFolder && !isAdvancedSearching },
+  );
+
+  const { data: labelMessages, loading: labelLoading, refetch: refetchLabel } = useApi<Message[]>(
+    isLabelFolder && !searchQuery && !isAdvancedSearching ? `/api/v1/labels/${labelFolderId}/messages` : '',
+    { immediate: isLabelFolder && !searchQuery && !isAdvancedSearching },
   );
 
   const { data: smartMessages, loading: smartLoading, refetch: refetchSmart } = useApi<Message[]>(
@@ -134,16 +142,18 @@ export function MessageList() {
     { immediate: isAdvancedSearching },
   );
 
-  const handleSync = useCallback(() => { refetch(); refetchSmart(); }, [refetch, refetchSmart]);
+  const handleSync = useCallback(() => { refetch(); refetchSmart(); refetchLabel(); }, [refetch, refetchSmart, refetchLabel]);
   useSyncEvents(handleSync);
 
   const fetchedMessages = isAdvancedSearching ? advancedResults
     : isSearching ? searchResults
     : isSmartFolder ? smartMessages
+    : isLabelFolder ? labelMessages
     : folderMessages;
   const loading = isAdvancedSearching ? advancedLoading
     : isSearching ? searchLoading
     : isSmartFolder ? smartLoading
+    : isLabelFolder ? labelLoading
     : folderLoading;
 
   // Sync fetched data into the store so mutations elsewhere can update it.
@@ -239,7 +249,8 @@ export function MessageList() {
     clearMessageSelection();
     refetch();
     refetchSmart();
-  }, [selectedMessageIds, clearMessageSelection, refetch, refetchSmart]);
+    refetchLabel();
+  }, [selectedMessageIds, clearMessageSelection, refetch, refetchSmart, refetchLabel]);
 
   // ── Context menu ─────────────────────────────────────────────────────────
 
@@ -335,12 +346,14 @@ export function MessageList() {
       ? `Results for "${debouncedQuery}"`
       : isSmartFolder
         ? (smartLabels[smartKind] ?? smartKind)
-        : selectedFolderId
-          ? (folders.find((f) => f.id === selectedFolderId)?.name ?? 'Messages')
-          : 'Select a folder';
+        : isLabelFolder
+          ? (labels.find((l) => l.id === labelFolderId)?.name ?? 'Label')
+          : selectedFolderId
+            ? (folders.find((f) => f.id === selectedFolderId)?.name ?? 'Messages')
+            : 'Select a folder';
 
-  // Thread grouping only in folder view (not search / smart folders).
-  const useThreading = !isSearching && !isAdvancedSearching && !isSmartFolder && !!selectedFolderId;
+  // Thread grouping only in regular folder view (not search / smart / label folders).
+  const useThreading = !isSearching && !isAdvancedSearching && !isSmartFolder && !isLabelFolder && !!selectedFolderId;
   const threadGroups = useThreading && messages.length ? groupByThread(messages) : null;
 
   const toggleThread = (key: string) => {
@@ -425,7 +438,7 @@ export function MessageList() {
         {!loading && isSearching && debouncedQuery.trim() && messages.length === 0 && (
           <div className={styles.empty}>No results for "{debouncedQuery}"</div>
         )}
-        {!loading && !isSearching && selectedFolderId && messages.length === 0 && (
+        {!loading && !isSearching && (selectedFolderId || isLabelFolder) && messages.length === 0 && (
           <div className={styles.empty}>No messages</div>
         )}
 

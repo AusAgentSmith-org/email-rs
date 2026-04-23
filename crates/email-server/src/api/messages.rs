@@ -393,6 +393,7 @@ pub async fn list_messages(
                   is_read, is_flagged, is_draft, has_attachments, preview
            FROM messages
            WHERE folder_id = ? AND is_read = 0
+             AND (snoozed_until IS NULL OR snoozed_until <= datetime('now'))
            ORDER BY date DESC
            LIMIT ? OFFSET ?"#
     } else {
@@ -401,6 +402,7 @@ pub async fn list_messages(
                   is_read, is_flagged, is_draft, has_attachments, preview
            FROM messages
            WHERE folder_id = ?
+             AND (snoozed_until IS NULL OR snoozed_until <= datetime('now'))
            ORDER BY date DESC
            LIMIT ? OFFSET ?"#
     };

@@ -1,0 +1,280 @@
+.ruleList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.ruleItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--tag);
+  border-radius: var(--radius-sm);
+}
+
+.ruleName {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ruleInactive {
+  opacity: 0.55;
+}
+
+.ruleMeta {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.ruleBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition), color var(--transition);
+  white-space: nowrap;
+}
+.ruleBtn:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.dangerBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #c0392b;
+  font-size: 12px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition), color var(--transition);
+}
+.dangerBtn:hover {
+  background: rgba(192, 57, 43, 0.1);
+}
+
+/* Editor */
+.editor {
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--read-bg);
+}
+
+.editorTitle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+}
+
+.fieldRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.label {
+  font-size: 13px;
+  color: var(--text-mid);
+  min-width: 110px;
+}
+
+.input {
+  flex: 1;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text);
+  font-family: var(--font-sans);
+  transition: border-color var(--transition);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.select {
+  composes: input;
+  cursor: pointer;
+}
+
+.sectionLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-mid);
+  margin-bottom: 8px;
+  margin-top: 4px;
+}
+
+/* Action rows */
+.actionList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.actionRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.actionSelect {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: border-color var(--transition);
+  flex: 1;
+}
+.actionSelect:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.removeBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 4px 7px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  line-height: 1;
+  transition: background var(--transition), color var(--transition);
+}
+.removeBtn:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.addBtn {
+  align-self: flex-start;
+  background: none;
+  border: 1px dashed var(--input-border);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--text-mid);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  margin-bottom: 14px;
+}
+.addBtn:hover {
+  background: var(--row-hover);
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.editorFooter {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+}
+
+.saveBtn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.saveBtn:hover {
+  background: var(--accent-hover);
+}
+.saveBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancelBtn {
+  background: none;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  padding: 7px 16px;
+  font-size: 13px;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.cancelBtn:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.newRuleBtn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.newRuleBtn:hover {
+  background: var(--accent-hover);
+}
+
+.empty {
+  font-size: 13px;
+  color: var(--text-dim);
+  padding: 4px 0 12px;
+}
+
+.error {
+  font-size: 12px;
+  color: #c0392b;
+  margin-bottom: 8px;
+}
+
+.matchRadioGroup {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.matchRadioGroup label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.toggle {
+  cursor: pointer;
+}

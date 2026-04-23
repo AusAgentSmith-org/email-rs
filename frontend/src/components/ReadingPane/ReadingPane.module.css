@@ -52,6 +52,82 @@
   flex: 1;
 }
 
+/* Snooze dropdown */
+.snoozeWrapper {
+  position: relative;
+}
+
+.snoozeDropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 100;
+  background: var(--surface);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  min-width: 200px;
+  padding: 4px 0;
+}
+
+.snoozeOption {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.snoozeOption:hover {
+  background: var(--row-hover);
+}
+
+.snoozeCustomRow {
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--divider);
+  margin-top: 4px;
+}
+
+.snoozeCustomInput {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+.snoozeCustomInput:focus {
+  border-color: var(--accent);
+}
+
+.snoozeCustomBtn {
+  padding: 4px 10px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.snoozeCustomBtn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.snoozeCustomBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .toolbarBtnDanger:hover {
   background: #fdf0ef;
   color: #c0392b;
@@ -231,4 +307,100 @@
 }
 .sendBtn:hover {
   background: var(--accent-hover);
+}
+
+/* Label chips */
+.labelRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.labelChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 6px;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--label-color) 18%, transparent);
+  border: 1px solid color-mix(in oklch, var(--label-color) 40%, transparent);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.labelDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--label-color, var(--accent));
+  flex-shrink: 0;
+}
+
+.labelRemove {
+  background: none;
+  border: none;
+  padding: 0 0 0 2px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--transition);
+}
+.labelRemove:hover {
+  color: var(--text);
+}
+
+.labelAddWrapper {
+  position: relative;
+}
+
+.labelAddBtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px dashed var(--input-border);
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+}
+.labelAddBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.labelDropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 100;
+  background: var(--surface);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  min-width: 150px;
+  padding: 4px 0;
+}
+
+.labelDropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.labelDropdownItem:hover {
+  background: var(--row-hover);
 }

@@ -86,15 +86,17 @@ Dev stack: `docker compose up --build` — Caddy proxy on :8585, backend (`cargo
 | `auth/` | Working | OAuth2 URL + token exchange, callback handler |
 | `imap/sync.rs` | Working | Poll loop wired to real IMAP, 4-connection parallel sync |
 | `smtp/mod.rs` | Skeleton | lettre multipart send stub |
-| `calendar/mod.rs` | Scaffold | `CalendarService` with sqlx queries |
+| `calendar/mod.rs` | **Done** | `CalendarService`: list/get/upsert events, email-event link CRUD |
+| `calendar/sync.rs` | **Done** | Google Calendar sync triggered after IMAP sync (best-effort) |
+| `providers/google_calendar.rs` | **Done** | Full CalendarProvider + CRUD, pagination, Meet link extraction |
 | `sync/mod.rs` | Working | `SyncOrchestrator` with SSE broadcast |
 | `api/accounts` | Working | CRUD + trigger sync |
 | `api/folders` | Working | List, patch, mark-read |
 | `api/messages` | Working | List, get (lazy body fetch), patch, delete, archive, bulk |
 | `api/search` | **Done** | FTS5 + BM25 ranking + LIKE fallback; `/suggest` autocomplete endpoint |
 | `api/smart_folders` | Done | all / unread / flagged |
-| `api/compose` | Skeleton | Route exists, not wired |
-| `api/calendar` | Scaffold | Route exists, not wired |
+| `api/compose` | **Done** | POST /messages sends via lettre (Gmail XOAUTH2 + basic auth) |
+| `api/calendar` | **Done** | List/get events, link management (add/remove/list email↔event) |
 | `api/events` | Done | SSE broadcast for sync progress |
 | `api/webhooks` | Scaffold | Table + routes, delivery not implemented |
 
@@ -113,7 +115,9 @@ Dev stack: `docker compose up --build` — Caddy proxy on :8585, backend (`cargo
 | `ConditionBuilder` | **Done** | Shared condition builder for search + rules (field/operator/value rows) |
 | `AdvancedSearchModal` | **Done** | Visual advanced search panel (Gmail-style) |
 | `SettingsModal` | Done | Account settings, folder exclusions |
-| `ComposeModal` | Done | Compose window |
+| `ComposeModal` | Done | Compose + send (text body, reply/forward, signature) |
+| `Calendar/CalendarView` | **Done** | 7-day week grid, event chips, all-day row, prev/next/today nav |
+| `Calendar/EventDetail` | **Done** | Event detail panel, attendees, Meet link, linked emails |
 | `useApi.ts` | Done | Abort-controller fetch hook |
 | `utils/search.ts` | Done | `conditionGroupToSearchUrl` serialiser |
 
@@ -128,7 +132,8 @@ Dev stack: `docker compose up --build` — Caddy proxy on :8585, backend (`cargo
 | `messages` | Message metadata + headers (always synced) |
 | `message_bodies` | HTML/text body (fetched lazily, cached) |
 | `attachments` | Attachment blobs |
-| `calendar_events` | Unified calendar event cache |
+| `calendar_events` | Unified calendar event cache (synced from Google Calendar) |
+| `message_calendar_links` | Many-to-many email ↔ calendar event links |
 | `webhooks` | Event webhook config |
 | `messages_fts` | FTS5 virtual table — subject, from_name, from_email, preview |
 
@@ -145,6 +150,10 @@ Dev stack: `docker compose up --build` — Caddy proxy on :8585, backend (`cargo
 - **Autocomplete dropdown** — 150ms debounce, prefix FTS5, keyboard nav, click-to-navigate
 - **Advanced search modal** — visual condition builder (from/to/subject/date/attachment filters), All/Any match
 - Smart folders: All Inboxes, Unread, Flagged
+- **Compose send** — Gmail XOAUTH2 + basic auth SMTP, reply/forward with quoted text + signature
+- **Google Calendar** — syncs after IMAP sync, 7-day week view, event detail with Meet link + attendees
+- **Email↔event linking** — link/unlink emails to calendar events, click linked email to navigate to it
+- **Search across mail + calendar** — FTS5 + BM25 for messages, LIKE for events; unified autocomplete dropdown
 - Dark/light theme, 3 density modes, resizable panels
 
 ---
@@ -177,13 +186,10 @@ MSI installer built and shipped via Woodpecker CI (`loungeroomwinOrg` agent, Win
 
 ## What's Not Built Yet
 
-- Rules / filters engine (conditions model done, execution not started)
-- Command palette (Ctrl+K)
-- SMTP sending (lettre wired, not fully hooked up)
-- CalDAV sync
-- Compose send (UI exists, API stub)
-- Snooze
-- Labels / tags
+- Rules / filters engine (conditions model done, execution in progress)
+- Snooze (in progress)
+- Labels / tags (in progress)
+- CalDAV sync (providers/caldav.rs is a skeleton)
 - Linux/macOS deployment (Komodo stack)
 - Mobile-responsive layout
 
@@ -191,7 +197,7 @@ MSI installer built and shipped via Woodpecker CI (`loungeroomwinOrg` agent, Win
 
 ## Immediate Next Steps
 
-1. Rules engine — backend schema + evaluation; frontend reuses ConditionBuilder
-2. Command palette (Ctrl+K) — action registry + fuzzy dispatch
-3. SMTP send — wire lettre through the compose flow
+1. Rules engine — merge in-progress backend + frontend
+2. Snooze — merge in-progress backend + frontend
+3. Labels — merge in-progress backend + frontend
 4. Deployment — Woodpecker pipeline + Komodo stack in ops repo

@@ -65,6 +65,7 @@ pub struct EventLink {
     pub id: String,
     pub event_id: String,
     pub message_id: String,
+    pub folder_id: String,
     pub subject: Option<String>,
     pub from_name: Option<String>,
     pub from_email: Option<String>,
@@ -205,6 +206,7 @@ impl CalendarService {
             id: String,
             event_id: String,
             message_id: String,
+            folder_id: String,
             linked_at: String,
             subject: Option<String>,
             from_name: Option<String>,
@@ -214,7 +216,7 @@ impl CalendarService {
 
         let rows = sqlx::query_as::<_, Row>(
             r#"SELECT l.id, l.event_id, l.message_id, l.linked_at,
-                      m.subject, m.from_name, m.from_email, m.date
+                      m.folder_id, m.subject, m.from_name, m.from_email, m.date
                FROM message_calendar_links l
                JOIN messages m ON m.id = l.message_id
                WHERE l.event_id = ?
@@ -230,6 +232,7 @@ impl CalendarService {
                 id: r.id,
                 event_id: r.event_id,
                 message_id: r.message_id,
+                folder_id: r.folder_id,
                 subject: r.subject,
                 from_name: r.from_name,
                 from_email: r.from_email,

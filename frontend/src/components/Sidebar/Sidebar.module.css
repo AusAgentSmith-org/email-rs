@@ -302,6 +302,20 @@
   text-align: center;
 }
 
+/* Labels section */
+.labelsSection {
+  flex-shrink: 0;
+  padding: 4px 6px 0;
+}
+
+/* Colored dot used for labels */
+.labelDot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
 /* Smart/IMAP divider */
 .divider {
   height: 1px;

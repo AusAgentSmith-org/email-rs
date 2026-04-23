@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{
-    routing::{get, patch, post},
+    routing::{get, patch, post, put},
     Router,
 };
 
@@ -13,9 +13,12 @@ pub mod calendar;
 pub mod compose;
 pub mod events;
 pub mod folders;
+pub mod labels;
 pub mod messages;
+pub mod rules;
 pub mod search;
 pub mod smart_folders;
+pub mod snooze;
 pub mod webhooks;
 
 pub fn router(state: Arc<AppState>) -> Router {
@@ -44,6 +47,15 @@ pub fn router(state: Arc<AppState>) -> Router {
                 .delete(messages::delete_message),
         )
         .route("/messages/{id}/archive", post(messages::archive_message))
+        .route("/messages/{id}/labels", get(labels::get_message_labels))
+        .route(
+            "/messages/{id}/labels/{label_id}",
+            post(labels::add_message_label).delete(labels::remove_message_label),
+        )
+        .route(
+            "/messages/{id}/snooze",
+            post(snooze::snooze_message).delete(snooze::unsnooze_message),
+        )
         .route("/messages", post(compose::send_message))
         .route("/calendar/events", get(calendar::list_events))
         .route("/calendar/events/{id}", get(calendar::get_event))
@@ -67,6 +79,21 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/smart-folders/{kind}/messages",
             get(smart_folders::list_smart_messages),
         )
+        .route(
+            "/labels",
+            get(labels::list_labels).post(labels::create_label),
+        )
+        .route(
+            "/labels/{id}",
+            put(labels::update_label).delete(labels::delete_label),
+        )
+        .route("/labels/{id}/messages", get(labels::list_label_messages))
+        .route("/rules", get(rules::list_rules).post(rules::create_rule))
+        .route(
+            "/rules/{id}",
+            put(rules::update_rule).delete(rules::delete_rule),
+        )
+        .route("/rules/{id}/toggle", post(rules::toggle_rule))
         .route(
             "/webhooks",
             get(webhooks::list_webhooks).post(webhooks::create_webhook),

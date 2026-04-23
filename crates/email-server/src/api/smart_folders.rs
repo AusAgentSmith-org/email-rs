@@ -32,6 +32,7 @@ pub async fn list_smart_messages(
                    FROM messages m
                    JOIN folders f ON m.folder_id = f.id
                    WHERE f.special_use = 'inbox'
+                     AND (m.snoozed_until IS NULL OR m.snoozed_until <= datetime('now'))
                    ORDER BY m.date DESC
                    LIMIT ? OFFSET ?"#,
             )
@@ -47,6 +48,7 @@ pub async fn list_smart_messages(
                           date, is_read, is_flagged, is_draft, has_attachments, preview
                    FROM messages
                    WHERE is_read = 0
+                     AND (snoozed_until IS NULL OR snoozed_until <= datetime('now'))
                    ORDER BY date DESC
                    LIMIT ? OFFSET ?"#,
             )
@@ -62,7 +64,23 @@ pub async fn list_smart_messages(
                           date, is_read, is_flagged, is_draft, has_attachments, preview
                    FROM messages
                    WHERE is_flagged = 1
+                     AND (snoozed_until IS NULL OR snoozed_until <= datetime('now'))
                    ORDER BY date DESC
+                   LIMIT ? OFFSET ?"#,
+            )
+            .bind(per_page)
+            .bind(offset)
+            .fetch_all(&state.pool)
+            .await?
+        }
+        "snoozed" => {
+            sqlx::query_as::<_, MessageRow>(
+                r#"SELECT id, account_id, folder_id, uid, message_id,
+                          thread_id, subject, from_name, from_email, to_json,
+                          date, is_read, is_flagged, is_draft, has_attachments, preview
+                   FROM messages
+                   WHERE snoozed_until IS NOT NULL AND snoozed_until > datetime('now')
+                   ORDER BY snoozed_until ASC
                    LIMIT ? OFFSET ?"#,
             )
             .bind(per_page)

@@ -295,6 +295,13 @@
   height: 12px;
 }
 
+/* Snoozed badge */
+.snoozedBadge {
+  display: flex;
+  align-items: center;
+  color: var(--accent);
+}
+
 /* Thread count badge */
 .threadCount {
   font-size: 10px;

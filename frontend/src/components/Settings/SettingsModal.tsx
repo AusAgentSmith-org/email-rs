@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import styles from './SettingsModal.module.css';
 import { useAppStore } from '../../store';
 import { DENSITY_MIN, DENSITY_MAX, DENSITY_LABELS } from '../../utils/density';
+import { RulesTab } from './RulesTab';
 import type { Account, AccountSettings, Folder } from '../../types';
 
 interface Webhook {
@@ -420,6 +421,7 @@ export function SettingsModal({ onAccountDeleted }: SettingsModalProps) {
   const tabs = [
     { id: 'global', label: 'General' },
     ...accounts.map((a) => ({ id: a.id, label: a.name || a.email })),
+    ...accounts.map((a) => ({ id: `rules-${a.id}`, label: `Rules (${a.name || a.email})` })),
     { id: 'webhooks', label: 'Webhooks' },
   ];
 
@@ -454,6 +456,8 @@ export function SettingsModal({ onAccountDeleted }: SettingsModalProps) {
             <GlobalTab />
           ) : activeTab === 'webhooks' ? (
             <WebhooksTab />
+          ) : activeTab.startsWith('rules-') ? (
+            <RulesTab accountId={activeTab.slice('rules-'.length)} />
           ) : activeAccount ? (
             <AccountTab
               account={activeAccount}

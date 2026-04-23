@@ -157,7 +157,7 @@ export function EventDetail({ event, onClose }: Props) {
             <div className={styles.linkList}>
               {links.map((link) => (
                 <div key={link.id} className={styles.linkRow}>
-                  <div className={styles.linkInfo} onClick={() => navigateToMessage(link.messageId, link.messageId)}>
+                  <div className={styles.linkInfo} onClick={() => navigateToMessage(link.folderId, link.messageId)}>
                     <span className={styles.linkSubject}>{link.subject || '(no subject)'}</span>
                     <span className={styles.linkMeta}>
                       {link.fromName || link.fromEmail || 'Unknown'}

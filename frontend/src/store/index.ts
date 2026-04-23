@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Account, ConditionGroup, Folder, Message } from '../types';
+import type { Account, ConditionGroup, Folder, Label, Message } from '../types';
 
 type View = 'mail' | 'calendar';
 
@@ -23,8 +23,10 @@ interface AppState {
   selectedCalendarEventId: string | null;
   selectedFolderId: string | null;
   selectedMessageId: string | null;
+  selectedLabelId: string | null;
   folderSelectSeq: number;
   folders: Folder[];
+  labels: Label[];
   accounts: Account[];
   compose: ComposeState | null;
   searchQuery: string;
@@ -42,8 +44,10 @@ interface AppState {
   setTheme: (t: Theme) => void;
   setDensity: (d: number) => void;
   setSelectedFolder: (id: string) => void;
+  setSelectedLabel: (id: string | null) => void;
   setSelectedMessage: (id: string | null) => void;
   setFolders: (folders: Folder[]) => void;
+  setLabels: (labels: Label[]) => void;
   setAccounts: (accounts: Account[]) => void;
   openCompose: (state: ComposeState) => void;
   closeCompose: () => void;
@@ -70,8 +74,10 @@ export const useAppStore = create<AppState>()(
       selectedCalendarEventId: null,
       selectedFolderId: null,
       selectedMessageId: null,
+      selectedLabelId: null,
       folderSelectSeq: 0,
       folders: [],
+      labels: [],
       accounts: [],
       compose: null,
       searchQuery: '',
@@ -89,9 +95,11 @@ export const useAppStore = create<AppState>()(
       setMessages: (msgs) => set({ messages: msgs }),
       patchMessage: (id, patch) => set((s) => ({ messages: s.messages.map((m) => m.id === id ? { ...m, ...patch } : m) })),
       removeMessage: (id) => set((s) => ({ messages: s.messages.filter((m) => m.id !== id), selectedMessageId: s.selectedMessageId === id ? null : s.selectedMessageId })),
-      setSelectedFolder: (id) => set((s) => ({ view: 'mail', selectedFolderId: id, selectedMessageId: null, searchQuery: '', conditionGroup: null, folderSelectSeq: s.folderSelectSeq + 1, messages: [], selectedMessageIds: [] })),
+      setSelectedFolder: (id) => set((s) => ({ view: 'mail', selectedFolderId: id, selectedLabelId: null, selectedMessageId: null, searchQuery: '', conditionGroup: null, folderSelectSeq: s.folderSelectSeq + 1, messages: [], selectedMessageIds: [] })),
+      setSelectedLabel: (id) => set((s) => ({ selectedLabelId: id, selectedFolderId: id ? `label:${id}` : null, selectedMessageId: null, searchQuery: '', conditionGroup: null, folderSelectSeq: s.folderSelectSeq + 1, messages: [], selectedMessageIds: [] })),
       setSelectedMessage: (id) => set({ selectedMessageId: id }),
       setFolders: (folders) => set({ folders }),
+      setLabels: (labels) => set({ labels }),
       setAccounts: (accounts) => set({ accounts }),
       openCompose: (compose) => set({ compose }),
       closeCompose: () => set({ compose: null }),

@@ -44,6 +44,15 @@ function FlagIcon() {
   );
 }
 
+function SnoozeClockIcon() {
+  return (
+    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="6" r="4.5" />
+      <path d="M6 4v2.5l1.2 1.2" />
+    </svg>
+  );
+}
+
 interface MessageRowProps {
   message: Message;
   isSelected: boolean;
@@ -133,6 +142,11 @@ export function MessageRow({
           )}
           {message.hasAttachments && <AttachmentIcon />}
           {message.isFlagged && <FlagIcon />}
+          {message.snoozedUntil && (
+            <span className={styles.snoozedBadge} title={`Snoozed until ${new Date(message.snoozedUntil).toLocaleString()}`}>
+              <SnoozeClockIcon />
+            </span>
+          )}
         </div>
       </div>
     </div>

@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import styles from './ReadingPane.module.css';
 import { useAppStore } from '../../store';
 import { useApi } from '../../hooks/useApi';
 import { useContextMenu } from '../ContextMenu/ContextMenu';
+import type { Label } from '../../types';
 
 interface FullMessage {
   id: string;
@@ -85,6 +86,38 @@ function TrashIcon() {
   );
 }
 
+function SnoozeIcon() {
+  return (
+    <svg viewBox="0 0 14 14" {...RP}>
+      <circle cx="7" cy="7" r="5.5" />
+      <path d="M7 4.5v3l1.5 1.5" />
+    </svg>
+  );
+}
+
+function snoozeUntilLaterToday(): string {
+  const d = new Date();
+  d.setHours(d.getHours() + 3, 0, 0, 0);
+  return d.toISOString();
+}
+
+function snoozeUntilTomorrowMorning(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  return d.toISOString();
+}
+
+function snoozeUntilNextWeek(): string {
+  const d = new Date();
+  const day = d.getDay();
+  // Days until next Monday (1 = Monday)
+  const daysUntilMonday = day === 0 ? 1 : 8 - day;
+  d.setDate(d.getDate() + daysUntilMonday);
+  d.setHours(9, 0, 0, 0);
+  return d.toISOString();
+}
+
 function ReadIcon({ isRead }: { isRead: boolean }) {
   return isRead ? (
     <svg viewBox="0 0 14 14" {...RP}>
@@ -106,11 +139,16 @@ function injectEmailBase(html: string, dark: boolean): string {
 }
 
 export function ReadingPane() {
-  const { selectedMessageId, setSelectedMessage, openCompose, theme } = useAppStore();
+  const { selectedMessageId, setSelectedMessage, openCompose, theme, accounts } = useAppStore();
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [localRead, setLocalRead] = useState<boolean | null>(null);
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const [customSnooze, setCustomSnooze] = useState('');
+  const [showLabelDropdown, setShowLabelDropdown] = useState(false);
+  const snoozeRef = useRef<HTMLDivElement>(null);
+  const labelDropdownRef = useRef<HTMLDivElement>(null);
   const { contextMenu, openContextMenu } = useContextMenu();
 
   const { data: message, loading } = useApi<FullMessage>(
@@ -118,8 +156,19 @@ export function ReadingPane() {
     { immediate: !!selectedMessageId },
   );
 
+  const { data: messageLabels, refetch: refetchMessageLabels } = useApi<Label[]>(
+    selectedMessageId ? `/api/v1/messages/${selectedMessageId}/labels` : '',
+    { immediate: !!selectedMessageId },
+  );
+
+  const accountId = message?.accountId ?? accounts?.[0]?.id ?? '';
+  const { data: allLabels } = useApi<Label[]>(
+    accountId ? `/api/v1/labels?account_id=${accountId}` : '',
+    { immediate: !!accountId },
+  );
+
   // Reset local overrides when message changes.
-  useEffect(() => { setLocalRead(null); }, [selectedMessageId]);
+  useEffect(() => { setLocalRead(null); setShowLabelDropdown(false); }, [selectedMessageId]);
 
   const isRead = localRead ?? message?.isRead ?? true;
 
@@ -145,6 +194,54 @@ export function ReadingPane() {
       body: JSON.stringify({ isRead: newRead }),
     });
   }, [selectedMessageId, message, isRead]);
+
+  const handleSnooze = useCallback(async (until: string) => {
+    if (!selectedMessageId) return;
+    setSnoozeOpen(false);
+    await fetch(`/api/v1/messages/${selectedMessageId}/snooze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ until }),
+    });
+    setSelectedMessage(null);
+  }, [selectedMessageId, setSelectedMessage]);
+
+  // Close snooze dropdown on outside click.
+  useEffect(() => {
+    if (!snoozeOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (snoozeRef.current && !snoozeRef.current.contains(e.target as Node)) {
+        setSnoozeOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [snoozeOpen]);
+
+  // Close label dropdown on outside click.
+  useEffect(() => {
+    if (!showLabelDropdown) return;
+    const onDown = (e: MouseEvent) => {
+      if (labelDropdownRef.current && !labelDropdownRef.current.contains(e.target as Node)) {
+        setShowLabelDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [showLabelDropdown]);
+
+  const handleAddLabel = useCallback(async (labelId: string) => {
+    if (!selectedMessageId) return;
+    setShowLabelDropdown(false);
+    await fetch(`/api/v1/messages/${selectedMessageId}/labels/${labelId}`, { method: 'POST' });
+    refetchMessageLabels();
+  }, [selectedMessageId, refetchMessageLabels]);
+
+  const handleRemoveLabel = useCallback(async (labelId: string) => {
+    if (!selectedMessageId) return;
+    await fetch(`/api/v1/messages/${selectedMessageId}/labels/${labelId}`, { method: 'DELETE' });
+    refetchMessageLabels();
+  }, [selectedMessageId, refetchMessageLabels]);
 
   // Keyboard shortcuts: e=archive, #=delete, u=mark unread, Escape=close
   useEffect(() => {
@@ -261,6 +358,60 @@ export function ReadingPane() {
           <ReadIcon isRead={isRead} />
           {isRead ? 'Unread' : 'Read'}
         </button>
+        <div className={styles.snoozeWrapper} ref={snoozeRef}>
+          <button
+            className={styles.toolbarBtn}
+            type="button"
+            onClick={() => setSnoozeOpen((v) => !v)}
+            title="Snooze"
+          >
+            <SnoozeIcon />
+            Snooze
+          </button>
+          {snoozeOpen && (
+            <div className={styles.snoozeDropdown}>
+              <button
+                type="button"
+                className={styles.snoozeOption}
+                onClick={() => handleSnooze(snoozeUntilLaterToday())}
+              >
+                Later today (3 hours)
+              </button>
+              <button
+                type="button"
+                className={styles.snoozeOption}
+                onClick={() => handleSnooze(snoozeUntilTomorrowMorning())}
+              >
+                Tomorrow morning (9am)
+              </button>
+              <button
+                type="button"
+                className={styles.snoozeOption}
+                onClick={() => handleSnooze(snoozeUntilNextWeek())}
+              >
+                Next week (Mon 9am)
+              </button>
+              <div className={styles.snoozeCustomRow}>
+                <input
+                  type="datetime-local"
+                  className={styles.snoozeCustomInput}
+                  value={customSnooze}
+                  onChange={(e) => setCustomSnooze(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className={styles.snoozeCustomBtn}
+                  disabled={!customSnooze}
+                  onClick={() => {
+                    if (customSnooze) handleSnooze(new Date(customSnooze).toISOString());
+                  }}
+                >
+                  Set
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <button className={styles.toolbarBtn} type="button" onClick={handleArchive} title="Archive (e)">
           <ArchiveIcon />
           Archive
@@ -311,6 +462,54 @@ export function ReadingPane() {
         {message.isFlagged && (
           <div className={styles.tags}>
             <span className={styles.tag}>Flagged</span>
+          </div>
+        )}
+
+        {/* Label chips */}
+        {((messageLabels && messageLabels.length > 0) || allLabels?.length) && (
+          <div className={styles.labelRow}>
+            {(messageLabels ?? []).map((lbl) => (
+              <span key={lbl.id} className={styles.labelChip} style={{ '--label-color': lbl.color } as React.CSSProperties}>
+                <span className={styles.labelDot} />
+                {lbl.name}
+                <button
+                  type="button"
+                  className={styles.labelRemove}
+                  onClick={() => handleRemoveLabel(lbl.id)}
+                  aria-label={`Remove label ${lbl.name}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            {allLabels && allLabels.length > 0 && (
+              <div className={styles.labelAddWrapper} ref={labelDropdownRef}>
+                <button
+                  type="button"
+                  className={styles.labelAddBtn}
+                  onClick={() => setShowLabelDropdown((v) => !v)}
+                >
+                  + Label
+                </button>
+                {showLabelDropdown && (
+                  <div className={styles.labelDropdown}>
+                    {allLabels
+                      .filter((l) => !(messageLabels ?? []).some((ml) => ml.id === l.id))
+                      .map((lbl) => (
+                        <button
+                          key={lbl.id}
+                          type="button"
+                          className={styles.labelDropdownItem}
+                          onClick={() => handleAddLabel(lbl.id)}
+                        >
+                          <span className={styles.labelDot} style={{ '--label-color': lbl.color } as React.CSSProperties} />
+                          {lbl.name}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

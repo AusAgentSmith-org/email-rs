@@ -150,6 +150,51 @@ async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<()> {
         }
     }
 
+    let migration_010 = include_str!("migrations/010_labels.sql");
+    for statement in migration_010.split(';') {
+        let trimmed = statement.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Err(e) = sqlx::query(trimmed).execute(pool).await {
+            let msg = e.to_string();
+            if msg.contains("already exists") || msg.contains("duplicate") {
+                continue;
+            }
+            return Err(e.into());
+        }
+    }
+
+    let migration_009 = include_str!("migrations/009_rules.sql");
+    for statement in migration_009.split(';') {
+        let trimmed = statement.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Err(e) = sqlx::query(trimmed).execute(pool).await {
+            let msg = e.to_string();
+            if msg.contains("already exists") || msg.contains("duplicate") {
+                continue;
+            }
+            return Err(e.into());
+        }
+    }
+
+    let migration_008 = include_str!("migrations/008_snooze.sql");
+    for statement in migration_008.split(';') {
+        let trimmed = statement.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Err(e) = sqlx::query(trimmed).execute(pool).await {
+            let msg = e.to_string();
+            if msg.contains("already exists") || msg.contains("duplicate column name") {
+                continue;
+            }
+            return Err(e.into());
+        }
+    }
+
     Ok(())
 }
 

@@ -39,6 +39,7 @@ export interface Message {
   hasAttachments: boolean;
   preview: string | null;
   threadId: string | null;
+  snoozedUntil?: string | null;
 }
 
 export interface MessageBody {
@@ -123,10 +124,18 @@ export interface SearchResponse {
   events: CalendarSearchResult[];
 }
 
+export interface Label {
+  id: string;
+  accountId: string;
+  name: string;
+  color: string;
+}
+
 export interface EventLink {
   id: string;
   eventId: string;
   messageId: string;
+  folderId: string;
   subject: string | null;
   fromName: string | null;
   fromEmail: string | null;

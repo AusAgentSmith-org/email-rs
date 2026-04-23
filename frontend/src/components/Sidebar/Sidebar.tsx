@@ -5,7 +5,7 @@ import { useApi, useSyncEvents } from '../../hooks/useApi';
 import { AddAccountModal } from '../AccountSetup/AddAccountModal';
 import { AdvancedSearchModal } from '../AdvancedSearch/AdvancedSearchModal';
 import { useContextMenu } from '../ContextMenu/ContextMenu';
-import type { Account, CalendarSuggestion, Folder, Suggestion, SuggestResponse } from '../../types';
+import type { Account, CalendarSuggestion, Folder, Label, Suggestion, SuggestResponse } from '../../types';
 
 type SuggestItem =
   | { kind: 'message'; data: Suggestion }
@@ -318,7 +318,7 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const { selectedFolderId, setSelectedFolder, setFolders, openCompose, searchQuery, setSearchQuery, conditionGroup, navigateToMessage, advancedSearchOpen, openAdvancedSearch, closeAdvancedSearch, theme, densityLevel, setTheme, setDensity, openSettings, setView, view, setSelectedCalendarEvent } = useAppStore();
+  const { selectedFolderId, selectedLabelId, setSelectedFolder, setSelectedLabel, setFolders, setLabels, openCompose, searchQuery, setSearchQuery, conditionGroup, navigateToMessage, advancedSearchOpen, openAdvancedSearch, closeAdvancedSearch, theme, densityLevel, setTheme, setDensity, openSettings, setView, view, setSelectedCalendarEvent } = useAppStore();
   const navRef = useRef<HTMLElement>(null);
   const { contextMenu, openContextMenu } = useContextMenu();
 
@@ -394,6 +394,13 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
   const { data: accounts } = useApi<Account[]>('/api/v1/accounts');
   const { accountFolders, allFolderData, refetchAll } = useAllAccountFolders(accounts);
 
+  // Fetch labels for the first account (labels are per-account; use first account for the sidebar).
+  const firstAccountId = accounts?.[0]?.id ?? '';
+  const { data: labels } = useApi<Label[]>(
+    firstAccountId ? `/api/v1/labels?account_id=${firstAccountId}` : '',
+    { immediate: !!firstAccountId },
+  );
+
   const handleSync = useCallback(() => {
     refetchAll();
   }, [refetchAll]);
@@ -410,6 +417,13 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...allFolderData, setFolders]);
+
+  // Sync labels into the store so MessageList can display the label name in the header.
+  useEffect(() => {
+    if (labels) {
+      setLabels(labels);
+    }
+  }, [labels, setLabels]);
 
   const specialOrder: Folder['specialUse'][] = ['inbox', 'sent', 'drafts', 'archive', 'trash', 'spam'];
 
@@ -551,7 +565,29 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
         </div>
       </div>
 
-      {/* Divider between smart folders and IMAP folders */}
+      {/* Labels section */}
+      {labels && labels.length > 0 && (
+        <div className={styles.labelsSection}>
+          {labels.map((label) => {
+            const isActive = view === 'mail' && selectedLabelId === label.id;
+            return (
+              <div
+                key={label.id}
+                className={`${styles.folderItem}${isActive ? ` ${styles.active}` : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedLabel(label.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter') setSelectedLabel(label.id); }}
+              >
+                <span className={styles.labelDot} style={{ background: label.color }} />
+                <span className={styles.folderName}>{label.name}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Divider between smart folders/labels and IMAP folders */}
       {accountFolders.length > 0 && <div className={styles.divider} />}
 
       {/* Scrollable per-account IMAP folders */}

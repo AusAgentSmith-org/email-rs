@@ -8,7 +8,9 @@ mod db;
 mod error;
 mod imap;
 mod providers;
+mod rules;
 mod smtp;
+
 mod state;
 mod sync;
 

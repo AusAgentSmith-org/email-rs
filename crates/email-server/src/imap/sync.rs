@@ -405,6 +405,21 @@ async fn sync_folder<P: MailProvider>(
     let mut unread_count: i64 = 0;
     let mut new_message_payloads: Vec<serde_json::Value> = Vec::new();
 
+    // Collect new message IDs and their fields for rules evaluation after commit.
+    struct NewMsgInfo {
+        id: String,
+        subject: Option<String>,
+        from_name: Option<String>,
+        from_email: Option<String>,
+        to_json: Option<String>,
+        preview: Option<String>,
+        is_read: bool,
+        is_flagged: bool,
+        has_attachments: bool,
+        date: Option<String>,
+    }
+    let mut new_msgs_for_rules: Vec<NewMsgInfo> = Vec::new();
+
     // Batch all inserts in a single transaction to reduce SQLite write-lock contention
     // when multiple folders are syncing in parallel.
     let mut tx = pool.begin().await?;
@@ -446,7 +461,7 @@ async fn sync_folder<P: MailProvider>(
         .execute(&mut *tx)
         .await?;
 
-        // Track genuinely new rows for webhook dispatch.
+        // Track genuinely new rows for webhook dispatch and rules evaluation.
         if result.rows_affected() == 1 {
             new_message_payloads.push(serde_json::json!({
                 "subject": msg.subject,
@@ -455,9 +470,42 @@ async fn sync_folder<P: MailProvider>(
                 "folder": db_folder.full_path,
                 "date": date_str,
             }));
+
+            new_msgs_for_rules.push(NewMsgInfo {
+                id: msg_id,
+                subject: msg.subject.clone(),
+                from_name: msg.from_name.clone(),
+                from_email: msg.from_email.clone(),
+                to_json: to_json.clone(),
+                preview: msg.preview.clone(),
+                is_read: msg.is_read,
+                is_flagged: msg.is_flagged,
+                has_attachments: msg.has_attachments,
+                date: date_str,
+            });
         }
     }
     tx.commit().await?;
+
+    // Apply rules to newly inserted messages now that the transaction is committed.
+    for info in &new_msgs_for_rules {
+        let fields = crate::rules::MessageFields {
+            subject: info.subject.as_deref(),
+            from_name: info.from_name.as_deref(),
+            from_email: info.from_email.as_deref(),
+            to_json: info.to_json.as_deref(),
+            preview: info.preview.as_deref(),
+            is_read: info.is_read,
+            is_flagged: info.is_flagged,
+            has_attachments: info.has_attachments,
+            date: info.date.as_deref(),
+        };
+        if let Err(e) =
+            crate::rules::apply_rules_to_message(&pool, account_id, &info.id, &fields).await
+        {
+            warn!("rules evaluation failed for message {}: {}", info.id, e);
+        }
+    }
 
     // Fire new_message webhooks for genuinely inserted messages.
     if !new_message_payloads.is_empty() {
