@@ -118,6 +118,29 @@
   color: var(--text-xdim);
 }
 
+.fieldActions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.fieldToggle {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition), background var(--transition);
+}
+.fieldToggle:hover {
+  color: var(--text);
+  background: var(--row-hover);
+}
+
 .body {
   flex: 1;
   overflow-y: auto;

@@ -7,15 +7,23 @@ export function ComposeModal() {
   const { compose, closeCompose } = useAppStore();
 
   const [to, setTo] = useState('');
+  const [cc, setCc] = useState('');
+  const [bcc, setBcc] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [signature, setSignature] = useState('');
+  const [showCc, setShowCc] = useState(false);
+  const [showBcc, setShowBcc] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (compose) {
       setTo(compose.to);
+      setCc('');
+      setBcc('');
+      setShowCc(false);
+      setShowBcc(false);
       setSubject(compose.subject);
       setBody(compose.mode === 'forward' ? buildForwardBody(compose.quotedText, compose.quotedFrom) : '');
       setError(null);
@@ -27,6 +35,8 @@ export function ComposeModal() {
         .catch(() => {});
     }
   }, [compose]);
+
+  const splitAddrs = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean);
 
   const handleSend = useCallback(async () => {
     if (!compose || !to.trim() || !body.trim()) return;
@@ -42,9 +52,9 @@ export function ComposeModal() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           accountId: compose.accountId,
-          to: to.split(',').map((s) => s.trim()).filter(Boolean),
-          cc: [],
-          bcc: [],
+          to: splitAddrs(to),
+          cc: splitAddrs(cc),
+          bcc: splitAddrs(bcc),
           subject,
           textBody: fullBody,
           inReplyTo: compose.inReplyTo,
@@ -88,7 +98,37 @@ export function ComposeModal() {
             placeholder="recipient@example.com"
             autoFocus={!to}
           />
+          <div className={styles.fieldActions}>
+            {!showCc && <button type="button" className={styles.fieldToggle} onClick={() => setShowCc(true)}>Cc</button>}
+            {!showBcc && <button type="button" className={styles.fieldToggle} onClick={() => setShowBcc(true)}>Bcc</button>}
+          </div>
         </div>
+        {showCc && (
+          <div className={styles.fieldRow}>
+            <span className={styles.fieldLabel}>Cc</span>
+            <input
+              className={styles.fieldInput}
+              type="text"
+              value={cc}
+              onChange={(e) => setCc(e.target.value)}
+              placeholder="cc@example.com"
+              autoFocus
+            />
+          </div>
+        )}
+        {showBcc && (
+          <div className={styles.fieldRow}>
+            <span className={styles.fieldLabel}>Bcc</span>
+            <input
+              className={styles.fieldInput}
+              type="text"
+              value={bcc}
+              onChange={(e) => setBcc(e.target.value)}
+              placeholder="bcc@example.com"
+              autoFocus={!showCc}
+            />
+          </div>
+        )}
         <div className={styles.fieldRow}>
           <span className={styles.fieldLabel}>Subject</span>
           <input
