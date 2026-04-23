@@ -135,6 +135,21 @@ async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<()> {
         }
     }
 
+    let migration_007 = include_str!("migrations/007_calendar_links.sql");
+    for statement in migration_007.split(';') {
+        let trimmed = statement.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Err(e) = sqlx::query(trimmed).execute(pool).await {
+            let msg = e.to_string();
+            if msg.contains("already exists") || msg.contains("duplicate") {
+                continue;
+            }
+            return Err(e.into());
+        }
+    }
+
     Ok(())
 }
 

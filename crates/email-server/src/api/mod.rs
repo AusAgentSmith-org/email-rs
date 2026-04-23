@@ -46,6 +46,15 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/messages/{id}/archive", post(messages::archive_message))
         .route("/messages", post(compose::send_message))
         .route("/calendar/events", get(calendar::list_events))
+        .route("/calendar/events/{id}", get(calendar::get_event))
+        .route(
+            "/calendar/events/{id}/links",
+            get(calendar::list_event_links).post(calendar::add_event_link),
+        )
+        .route(
+            "/calendar/events/{id}/links/{message_id}",
+            axum::routing::delete(calendar::remove_event_link),
+        )
         .route("/sync/{account_id}", post(accounts::trigger_sync))
         .route("/auth/gmail/authorize", get(auth::gmail_authorize))
         .route("/auth/gmail/callback", get(auth::gmail_callback))

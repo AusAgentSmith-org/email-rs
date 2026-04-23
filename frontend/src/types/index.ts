@@ -122,3 +122,14 @@ export interface SearchResponse {
   messages: Message[];
   events: CalendarSearchResult[];
 }
+
+export interface EventLink {
+  id: string;
+  eventId: string;
+  messageId: string;
+  subject: string | null;
+  fromName: string | null;
+  fromEmail: string | null;
+  date: string | null;
+  linkedAt: string;
+}

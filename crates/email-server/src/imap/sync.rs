@@ -153,6 +153,24 @@ impl ImapSyncEngine {
                 );
                 self.sync_provider(account_id, provider, event_tx, account.sync_days_limit)
                     .await?;
+
+                // Sync Google Calendar after IMAP sync — best-effort, never fails the IMAP sync.
+                let token_json = account
+                    .oauth_token_json
+                    .as_deref()
+                    .unwrap_or_default()
+                    .to_string();
+                let pool = self.pool.clone();
+                let email = account.email.clone();
+                let aid = account_id.to_string();
+                tokio::spawn(async move {
+                    if let Err(e) =
+                        crate::calendar::sync::sync_gmail_calendar(&pool, &aid, &email, &token_json)
+                            .await
+                    {
+                        warn!("calendar sync failed for account {}: {}", aid, e);
+                    }
+                });
             }
             other => {
                 warn!(

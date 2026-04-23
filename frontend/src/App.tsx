@@ -6,6 +6,7 @@ import { AccountSetup } from './components/AccountSetup/AccountSetup';
 import { ComposeModal } from './components/Compose/ComposeModal';
 import { SettingsModal } from './components/Settings/SettingsModal';
 import { CommandPalette } from './components/CommandPalette/CommandPalette';
+import { CalendarView } from './components/Calendar/CalendarView';
 import { useAppStore } from './store';
 import { applyDensity } from './utils/density';
 import type { Account } from './types';
@@ -68,7 +69,7 @@ const handleStyle: React.CSSProperties = {
 };
 
 export function App() {
-  const { theme, densityLevel, accounts, setAccounts, compose, settingsOpen, openPalette, closePalette, paletteOpen } = useAppStore();
+  const { theme, densityLevel, accounts, setAccounts, compose, settingsOpen, openPalette, closePalette, paletteOpen, view } = useAppStore();
   const [accountsLoaded, setAccountsLoaded] = useState(false);
 
   const sidebar = usePanelResize(SIDEBAR_W_KEY,  DEFAULT_SIDEBAR_W, MIN_W, MAX_SIDEBAR_W);
@@ -118,20 +119,28 @@ export function App() {
           onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
         />
 
-        <div style={{ width: msglist.width, flexShrink: 0, overflow: 'hidden', height: '100%' }}>
-          <MessageList />
-        </div>
+        {view === 'calendar' ? (
+          <div style={{ flex: 1, overflow: 'hidden', height: '100%', minWidth: 0 }}>
+            <CalendarView />
+          </div>
+        ) : (
+          <>
+            <div style={{ width: msglist.width, flexShrink: 0, overflow: 'hidden', height: '100%' }}>
+              <MessageList />
+            </div>
 
-        <div
-          style={handleStyle}
-          onMouseDown={msglist.onMouseDown}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--divider)'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-        />
+            <div
+              style={handleStyle}
+              onMouseDown={msglist.onMouseDown}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--divider)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+            />
 
-        <div style={{ flex: 1, overflow: 'hidden', height: '100%', minWidth: 0 }}>
-          {compose ? <ComposeModal /> : <ReadingPane />}
-        </div>
+            <div style={{ flex: 1, overflow: 'hidden', height: '100%', minWidth: 0 }}>
+              {compose ? <ComposeModal /> : <ReadingPane />}
+            </div>
+          </>
+        )}
 
       {settingsOpen && <SettingsModal onAccountDeleted={fetchAccounts} />}
       <CommandPalette />

@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Account, ConditionGroup, Folder, Message } from '../types';
 
+type View = 'mail' | 'calendar';
+
 type Theme = 'light' | 'dark';
 
 export interface ComposeState {
@@ -17,6 +19,8 @@ export interface ComposeState {
 interface AppState {
   theme: Theme;
   densityLevel: number;
+  view: View;
+  selectedCalendarEventId: string | null;
   selectedFolderId: string | null;
   selectedMessageId: string | null;
   folderSelectSeq: number;
@@ -33,6 +37,8 @@ interface AppState {
   setMessages: (msgs: Message[]) => void;
   patchMessage: (id: string, patch: Partial<Message>) => void;
   removeMessage: (id: string) => void;
+  setView: (v: View) => void;
+  setSelectedCalendarEvent: (id: string | null) => void;
   setTheme: (t: Theme) => void;
   setDensity: (d: number) => void;
   setSelectedFolder: (id: string) => void;
@@ -60,6 +66,8 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       theme: 'light',
       densityLevel: 4,
+      view: 'mail',
+      selectedCalendarEventId: null,
       selectedFolderId: null,
       selectedMessageId: null,
       folderSelectSeq: 0,
@@ -74,12 +82,14 @@ export const useAppStore = create<AppState>()(
       messages: [],
       selectedMessageIds: [],
 
+      setView: (view) => set({ view }),
+      setSelectedCalendarEvent: (selectedCalendarEventId) => set({ selectedCalendarEventId }),
       setTheme: (theme) => set({ theme }),
       setDensity: (densityLevel) => set({ densityLevel }),
       setMessages: (msgs) => set({ messages: msgs }),
       patchMessage: (id, patch) => set((s) => ({ messages: s.messages.map((m) => m.id === id ? { ...m, ...patch } : m) })),
       removeMessage: (id) => set((s) => ({ messages: s.messages.filter((m) => m.id !== id), selectedMessageId: s.selectedMessageId === id ? null : s.selectedMessageId })),
-      setSelectedFolder: (id) => set((s) => ({ selectedFolderId: id, selectedMessageId: null, searchQuery: '', conditionGroup: null, folderSelectSeq: s.folderSelectSeq + 1, messages: [], selectedMessageIds: [] })),
+      setSelectedFolder: (id) => set((s) => ({ view: 'mail', selectedFolderId: id, selectedMessageId: null, searchQuery: '', conditionGroup: null, folderSelectSeq: s.folderSelectSeq + 1, messages: [], selectedMessageIds: [] })),
       setSelectedMessage: (id) => set({ selectedMessageId: id }),
       setFolders: (folders) => set({ folders }),
       setAccounts: (accounts) => set({ accounts }),

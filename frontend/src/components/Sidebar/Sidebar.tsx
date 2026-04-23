@@ -190,6 +190,16 @@ function SnoozedIcon({ className }: { className?: string }) {
   );
 }
 
+function CalendarNavIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" {...IC}>
+      <rect x="1.5" y="3" width="13" height="11" rx="1.5" />
+      <path d="M1.5 7.5h13" />
+      <path d="M5 1.5v3M11 1.5v3" />
+    </svg>
+  );
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function folderDepth(folder: Folder): number {
@@ -308,7 +318,7 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const { selectedFolderId, setSelectedFolder, setFolders, openCompose, searchQuery, setSearchQuery, conditionGroup, navigateToMessage, advancedSearchOpen, openAdvancedSearch, closeAdvancedSearch, theme, densityLevel, setTheme, setDensity, openSettings } = useAppStore();
+  const { selectedFolderId, setSelectedFolder, setFolders, openCompose, searchQuery, setSearchQuery, conditionGroup, navigateToMessage, advancedSearchOpen, openAdvancedSearch, closeAdvancedSearch, theme, densityLevel, setTheme, setDensity, openSettings, setView, view, setSelectedCalendarEvent } = useAppStore();
   const navRef = useRef<HTMLElement>(null);
   const { contextMenu, openContextMenu } = useContextMenu();
 
@@ -359,8 +369,10 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
     setSuggestions([]);
     if (s.kind === 'message') {
       navigateToMessage(s.data.folderId, s.data.id);
+    } else {
+      setView('calendar');
+      setSelectedCalendarEvent(s.data.id);
     }
-    // Calendar event navigation: wire up when calendar view is built
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -509,7 +521,7 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
       {/* Smart / virtual folders — pinned, never scrolls */}
       <div className={styles.smartSection}>
         {SMART_FOLDERS.map(({ id, label, Icon }) => {
-          const isActive = id === selectedFolderId;
+          const isActive = view === 'mail' && id === selectedFolderId;
           return (
             <div
               key={id}
@@ -527,6 +539,16 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
             </div>
           );
         })}
+        <div
+          className={`${styles.folderItem}${view === 'calendar' ? ` ${styles.active}` : ''}`}
+          role="button"
+          tabIndex={0}
+          onClick={() => setView('calendar')}
+          onKeyDown={(e) => { if (e.key === 'Enter') setView('calendar'); }}
+        >
+          <CalendarNavIcon className={styles.folderIcon} />
+          <span className={styles.folderName}>Calendar</span>
+        </div>
       </div>
 
       {/* Divider between smart folders and IMAP folders */}

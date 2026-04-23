@@ -55,6 +55,7 @@ pub struct Calendar {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Attendee {
     pub email: String,
     pub name: Option<String>,
@@ -62,6 +63,7 @@ pub struct Attendee {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CalendarEvent {
     pub id: String,
     pub calendar_id: String,
@@ -160,3 +162,4 @@ pub trait RichCalendarProvider: CalendarProvider {
 pub mod caldav;
 pub mod generic_imap;
 pub mod gmail;
+pub mod google_calendar;
