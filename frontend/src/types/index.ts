@@ -96,3 +96,29 @@ export interface Suggestion {
   fromEmail: string | null;
   date: string | null;
 }
+
+export interface CalendarSuggestion {
+  id: string;
+  title: string;
+  startAt: string;
+}
+
+export interface SuggestResponse {
+  messages: Suggestion[];
+  events: CalendarSuggestion[];
+}
+
+export interface CalendarSearchResult {
+  id: string;
+  title: string;
+  description: string | null;
+  startAt: string;
+  endAt: string;
+  location: string | null;
+  isAllDay: boolean;
+}
+
+export interface SearchResponse {
+  messages: Message[];
+  events: CalendarSearchResult[];
+}

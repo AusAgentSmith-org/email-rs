@@ -123,10 +123,11 @@ export function MessageList() {
     return () => clearTimeout(t);
   }, [searchQuery]);
 
-  const { data: searchResults, loading: searchLoading } = useApi<Message[]>(
+  const { data: searchResultsRaw, loading: searchLoading } = useApi<{ messages: Message[] }>(
     debouncedQuery.trim() ? `/api/v1/search?q=${encodeURIComponent(debouncedQuery.trim())}` : '',
     { immediate: !!debouncedQuery.trim() },
   );
+  const searchResults = searchResultsRaw?.messages;
 
   const { data: advancedResults, loading: advancedLoading } = useApi<Message[]>(
     advancedSearchUrl,

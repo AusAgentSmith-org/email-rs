@@ -208,6 +208,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.suggestEventLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+}
+
 .suggestFooter {
   padding: 6px 12px;
   font-size: 11px;

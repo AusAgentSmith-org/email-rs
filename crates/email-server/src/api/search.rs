@@ -45,19 +45,23 @@ fn fts_prefix_query(term: &str) -> String {
 pub async fn search_messages(
     State(state): State<Arc<AppState>>,
     Query(params): Query<SearchQuery>,
-) -> Result<Json<Vec<MessageRow>>> {
+) -> Result<Json<SearchResponse>> {
     let term = params.q.trim();
     if term.is_empty() {
-        return Ok(Json(vec![]));
+        return Ok(Json(SearchResponse {
+            messages: vec![],
+            events: vec![],
+        }));
     }
 
-    let rows = if state.has_fts {
+    let messages = if state.has_fts {
         search_fts(&state, term, params.account_id.as_deref()).await?
     } else {
         search_like(&state, term, params.account_id.as_deref()).await?
     };
+    let events = search_calendar_events(&state, term, params.account_id.as_deref(), 20).await?;
 
-    Ok(Json(rows))
+    Ok(Json(SearchResponse { messages, events }))
 }
 
 async fn search_fts(
@@ -176,6 +180,40 @@ async fn search_like(
     Ok(rows)
 }
 
+// ── Search + suggest response types ──────────────────────────────────────────
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarSearchRow {
+    pub id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub start_at: String,
+    pub end_at: String,
+    pub location: Option<String>,
+    pub is_all_day: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SearchResponse {
+    pub messages: Vec<MessageRow>,
+    pub events: Vec<CalendarSearchRow>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarSuggestRow {
+    pub id: String,
+    pub title: String,
+    pub start_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SuggestResponse {
+    pub messages: Vec<SuggestRow>,
+    pub events: Vec<CalendarSuggestRow>,
+}
+
 // ── Suggest (autocomplete) ────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -192,13 +230,16 @@ pub struct SuggestRow {
 pub async fn suggest_messages(
     State(state): State<Arc<AppState>>,
     Query(params): Query<SearchQuery>,
-) -> Result<Json<Vec<SuggestRow>>> {
+) -> Result<Json<SuggestResponse>> {
     let term = params.q.trim();
     if term.len() < 2 {
-        return Ok(Json(vec![]));
+        return Ok(Json(SuggestResponse {
+            messages: vec![],
+            events: vec![],
+        }));
     }
 
-    let rows = if state.has_fts {
+    let messages = if state.has_fts {
         let q = fts_prefix_query(term);
         if let Some(aid) = &params.account_id {
             sqlx::query_as::<_, SuggestRow>(
@@ -243,8 +284,63 @@ pub async fn suggest_messages(
         .fetch_all(&state.pool)
         .await?
     };
+    let events = suggest_calendar_events(&state, term).await?;
 
-    Ok(Json(rows))
+    Ok(Json(SuggestResponse { messages, events }))
+}
+
+async fn suggest_calendar_events(state: &AppState, term: &str) -> Result<Vec<CalendarSuggestRow>> {
+    let q = format!("%{term}%");
+    sqlx::query_as::<_, CalendarSuggestRow>(
+        "SELECT id, title, start_at FROM calendar_events \
+         WHERE title LIKE ? OR description LIKE ? \
+         ORDER BY start_at \
+         LIMIT 3",
+    )
+    .bind(&q)
+    .bind(&q)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(Into::into)
+}
+
+async fn search_calendar_events(
+    state: &AppState,
+    term: &str,
+    account_id: Option<&str>,
+    limit: i64,
+) -> Result<Vec<CalendarSearchRow>> {
+    let q = format!("%{term}%");
+    if let Some(aid) = account_id {
+        sqlx::query_as::<_, CalendarSearchRow>(
+            "SELECT id, title, description, start_at, end_at, location, is_all_day \
+             FROM calendar_events \
+             WHERE account_id = ? AND (title LIKE ? OR description LIKE ?) \
+             ORDER BY start_at \
+             LIMIT ?",
+        )
+        .bind(aid)
+        .bind(&q)
+        .bind(&q)
+        .bind(limit)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(Into::into)
+    } else {
+        sqlx::query_as::<_, CalendarSearchRow>(
+            "SELECT id, title, description, start_at, end_at, location, is_all_day \
+             FROM calendar_events \
+             WHERE title LIKE ? OR description LIKE ? \
+             ORDER BY start_at \
+             LIMIT ?",
+        )
+        .bind(&q)
+        .bind(&q)
+        .bind(limit)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(Into::into)
+    }
 }
 
 #[cfg(test)]
@@ -382,7 +478,8 @@ mod tests {
         let state = make_state(true).await;
         let (status, body) = do_get(crate::api::router(state), "/search?q=").await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body, serde_json::json!([]));
+        assert_eq!(body["messages"], serde_json::json!([]));
+        assert_eq!(body["events"], serde_json::json!([]));
     }
 
     #[tokio::test]
@@ -390,7 +487,8 @@ mod tests {
         let state = make_state(true).await;
         let (status, body) = do_get(crate::api::router(state), "/search?q=%20%20").await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body, serde_json::json!([]));
+        assert_eq!(body["messages"], serde_json::json!([]));
+        assert_eq!(body["events"], serde_json::json!([]));
     }
 
     #[tokio::test]
@@ -409,7 +507,7 @@ mod tests {
         .await;
         let (status, body) = do_get(crate::api::router(state), "/search?q=tomorrow").await;
         assert_eq!(status, StatusCode::OK);
-        let arr = body.as_array().unwrap();
+        let arr = body["messages"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["id"], "m1");
     }
@@ -430,7 +528,11 @@ mod tests {
         .await;
         let (status, body) = do_get(crate::api::router(state), "/search?q=bob%40company.com").await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body.as_array().unwrap().iter().any(|m| m["id"] == "m2"));
+        assert!(body["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["id"] == "m2"));
     }
 
     #[tokio::test]
@@ -449,7 +551,7 @@ mod tests {
         .await;
         let (status, body) = do_get(crate::api::router(state), "/search?q=xyznonexistent").await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body.as_array().unwrap().len(), 0);
+        assert_eq!(body["messages"].as_array().unwrap().len(), 0);
     }
 
     #[tokio::test]
@@ -483,7 +585,7 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::OK);
-        let arr = body.as_array().unwrap();
+        let arr = body["messages"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["id"], "ma1");
     }
@@ -504,7 +606,11 @@ mod tests {
         .await;
         let (status, body) = do_get(crate::api::router(state), "/search?q=urgent").await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body.as_array().unwrap().iter().any(|m| m["id"] == "m4"));
+        assert!(body["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["id"] == "m4"));
     }
 
     #[tokio::test]
@@ -523,7 +629,7 @@ mod tests {
         .await;
         let (status, body) = do_get(crate::api::router(state), "/search?q=Invoice").await;
         assert_eq!(status, StatusCode::OK);
-        let arr = body.as_array().unwrap();
+        let arr = body["messages"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["id"], "ml1");
     }
@@ -559,7 +665,7 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::OK);
-        let arr = body.as_array().unwrap();
+        let arr = body["messages"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["id"], "lkb");
     }
@@ -569,7 +675,8 @@ mod tests {
         let state = make_state(true).await;
         let (status, body) = do_get(crate::api::router(state), "/search/suggest?q=a").await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body, serde_json::json!([]));
+        assert_eq!(body["messages"], serde_json::json!([]));
+        assert_eq!(body["events"], serde_json::json!([]));
     }
 
     #[tokio::test]
@@ -599,7 +706,7 @@ mod tests {
         .await;
         let (status, body) = do_get(crate::api::router(state), "/search/suggest?q=Quar").await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body.as_array().unwrap().len(), 2);
+        assert_eq!(body["messages"].as_array().unwrap().len(), 2);
     }
 
     #[tokio::test]
@@ -621,7 +728,7 @@ mod tests {
         let (status, body) =
             do_get(crate::api::router(state), "/search/suggest?q=Newsletter").await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body.as_array().unwrap().len() <= 8);
+        assert!(body["messages"].as_array().unwrap().len() <= 8);
     }
 
     #[tokio::test]
@@ -640,6 +747,10 @@ mod tests {
         .await;
         let (status, body) = do_get(crate::api::router(state), "/search/suggest?q=News").await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body.as_array().unwrap().iter().any(|m| m["id"] == "sl1"));
+        assert!(body["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["id"] == "sl1"));
     }
 }

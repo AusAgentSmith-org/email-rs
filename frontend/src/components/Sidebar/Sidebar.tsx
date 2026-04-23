@@ -5,7 +5,11 @@ import { useApi, useSyncEvents } from '../../hooks/useApi';
 import { AddAccountModal } from '../AccountSetup/AddAccountModal';
 import { AdvancedSearchModal } from '../AdvancedSearch/AdvancedSearchModal';
 import { useContextMenu } from '../ContextMenu/ContextMenu';
-import type { Account, Folder, Suggestion } from '../../types';
+import type { Account, CalendarSuggestion, Folder, Suggestion, SuggestResponse } from '../../types';
+
+type SuggestItem =
+  | { kind: 'message'; data: Suggestion }
+  | { kind: 'event'; data: CalendarSuggestion };
 
 // ── SVG icons ────────────────────────────────────────────────────────────────
 
@@ -298,7 +302,7 @@ interface SidebarProps {
 export function Sidebar({ onAccountAdded }: SidebarProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<SuggestItem[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
@@ -323,9 +327,13 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
       try {
         const res = await fetch(`/api/v1/search/suggest?q=${encodeURIComponent(q)}`);
         if (res.ok) {
-          const data = (await res.json()) as Suggestion[];
-          setSuggestions(data);
-          setShowSuggestions(data.length > 0);
+          const data = (await res.json()) as SuggestResponse;
+          const items: SuggestItem[] = [
+            ...data.messages.map((m): SuggestItem => ({ kind: 'message', data: m })),
+            ...data.events.map((e): SuggestItem => ({ kind: 'event', data: e })),
+          ];
+          setSuggestions(items);
+          setShowSuggestions(items.length > 0);
           setActiveSuggestion(-1);
         }
       } catch { /* ignore */ }
@@ -346,10 +354,13 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
     setActiveSuggestion(-1);
   };
 
-  const handleSuggestionClick = (s: Suggestion) => {
+  const handleSuggestionClick = (s: SuggestItem) => {
     closeSuggestions();
     setSuggestions([]);
-    navigateToMessage(s.folderId, s.id);
+    if (s.kind === 'message') {
+      navigateToMessage(s.data.folderId, s.data.id);
+    }
+    // Calendar event navigation: wire up when calendar view is built
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -439,7 +450,7 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
           ref={searchInputRef}
           className={styles.searchInput}
           type="text"
-          placeholder="Search mail…"
+          placeholder="Search mail & calendar…"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyDown={handleSearchKeyDown}
@@ -465,13 +476,28 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
         >
           {suggestions.map((s, i) => (
             <div
-              key={s.id}
+              key={`${s.kind}-${s.kind === 'message' ? s.data.id : s.data.id}`}
               className={`${styles.suggestRow}${i === activeSuggestion ? ` ${styles.suggestRowActive}` : ''}`}
               onClick={() => handleSuggestionClick(s)}
             >
-              <span className={styles.suggestFrom}>{s.fromName || s.fromEmail || 'Unknown'}</span>
-              <span className={styles.suggestDate}>{formatSuggestDate(s.date)}</span>
-              <span className={styles.suggestSubject}>{s.subject || '(no subject)'}</span>
+              {s.kind === 'message' ? (
+                <>
+                  <span className={styles.suggestFrom}>{s.data.fromName || s.data.fromEmail || 'Unknown'}</span>
+                  <span className={styles.suggestDate}>{formatSuggestDate(s.data.date)}</span>
+                  <span className={styles.suggestSubject}>{s.data.subject || '(no subject)'}</span>
+                </>
+              ) : (
+                <>
+                  <span className={`${styles.suggestFrom} ${styles.suggestEventLabel}`}>
+                    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="11" height="11" style={{ flexShrink: 0 }}>
+                      <rect x="1" y="2" width="10" height="9" rx="1" />
+                      <path d="M4 1v2M8 1v2M1 5h10" />
+                    </svg>
+                    {s.data.title}
+                  </span>
+                  <span className={styles.suggestDate}>{formatSuggestDate(s.data.startAt)}</span>
+                </>
+              )}
             </div>
           ))}
           <div className={styles.suggestFooter}>↵ Enter to search all results</div>
