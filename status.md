@@ -79,7 +79,7 @@ Dev stack: `docker compose up --build` — Caddy proxy on :8585, backend (`cargo
 | `main.rs` | Done | Axum router, pool init, static file serving, sync spawn |
 | `config.rs` | Done | Env-driven config |
 | `error.rs` | Done | `AppError` thiserror + `IntoResponse` |
-| `db/` | Done | Runtime migrations 001–004 + FTS5 migration (005, inline Rust) |
+| `db/` | Done | Runtime migrations 001–010 — snooze, rules, labels, calendar links |
 | `providers/mod.rs` | Done | All three traits + domain types |
 | `providers/gmail.rs` | Working | OAuth2 token refresh, IMAP XOAUTH2, SMTP |
 | `providers/caldav.rs` | Skeleton | HTTP basic auth stub |
@@ -94,7 +94,11 @@ Dev stack: `docker compose up --build` — Caddy proxy on :8585, backend (`cargo
 | `api/folders` | Working | List, patch, mark-read |
 | `api/messages` | Working | List, get (lazy body fetch), patch, delete, archive, bulk |
 | `api/search` | **Done** | FTS5 + BM25 ranking + LIKE fallback; `/suggest` autocomplete endpoint |
-| `api/smart_folders` | Done | all / unread / flagged |
+| `api/smart_folders` | Done | all / unread / flagged / snoozed |
+| `api/snooze` | **Done** | POST/DELETE snooze on messages; snoozed messages hidden from regular views |
+| `api/labels` | **Done** | Full CRUD, message label add/remove/list, label message list |
+| `api/rules` | **Done** | CRUD + toggle; 12 condition types, 6 action types |
+| `rules/mod.rs` | **Done** | Rules evaluation engine; applied to new messages on sync |
 | `api/compose` | **Done** | POST /messages sends via lettre (Gmail XOAUTH2 + basic auth) |
 | `api/calendar` | **Done** | List/get events, link management (add/remove/list email↔event) |
 | `api/events` | Done | SSE broadcast for sync progress |
@@ -108,13 +112,13 @@ Dev stack: `docker compose up --build` — Caddy proxy on :8585, backend (`cargo
 | `store/index.ts` | Done | Zustand; persists theme + density; conditionGroup for advanced search |
 | `types/index.ts` | Done | Message, Folder, Account, CalendarEvent, Condition types, Suggestion |
 | `App.tsx` | Done | 3-pane grid, resizable panels, data-theme + data-density |
-| `Sidebar.tsx` | Done | Compose, search + autocomplete dropdown, folder nav, account strip |
-| `MessageList.tsx` | Done | Header, scrollable list, thread grouping, bulk actions, keyboard nav |
-| `MessageRow.tsx` | Done | Avatar, sender, timestamp, unread dot |
-| `ReadingPane.tsx` | Done | Header, lazy body fetch, quick reply |
+| `Sidebar.tsx` | Done | Compose, search + autocomplete, folder nav, smart folders, labels section |
+| `MessageList.tsx` | Done | Header, scrollable list, thread grouping, bulk actions, keyboard nav, label folders |
+| `MessageRow.tsx` | Done | Avatar, sender, timestamp, unread dot, snooze badge |
+| `ReadingPane.tsx` | Done | Header, lazy body fetch, quick reply, snooze dropdown, label chips |
 | `ConditionBuilder` | **Done** | Shared condition builder for search + rules (field/operator/value rows) |
 | `AdvancedSearchModal` | **Done** | Visual advanced search panel (Gmail-style) |
-| `SettingsModal` | Done | Account settings, folder exclusions |
+| `SettingsModal` | Done | Account settings, folder exclusions, Rules tab |
 | `ComposeModal` | Done | Compose + send (text body, reply/forward, signature) |
 | `Calendar/CalendarView` | **Done** | 7-day week grid, event chips, all-day row, prev/next/today nav |
 | `Calendar/EventDetail` | **Done** | Event detail panel, attendees, Meet link, linked emails |
@@ -129,12 +133,17 @@ Dev stack: `docker compose up --build` — Caddy proxy on :8585, backend (`cargo
 |-------|---------|
 | `accounts` | Email account credentials + provider config |
 | `folders` | IMAP folders per account, sync state |
-| `messages` | Message metadata + headers (always synced) |
+| `messages` | Message metadata + headers (always synced); `snoozed_until` column |
 | `message_bodies` | HTML/text body (fetched lazily, cached) |
 | `attachments` | Attachment blobs |
 | `calendar_events` | Unified calendar event cache (synced from Google Calendar) |
 | `message_calendar_links` | Many-to-many email ↔ calendar event links |
 | `webhooks` | Event webhook config |
+| `labels` | User-defined labels per account (name + color) |
+| `message_labels` | Many-to-many message ↔ label |
+| `rules` | Automation rules (name, match_mode, enabled) |
+| `rule_conditions` | Condition rows per rule (field, operator, value) |
+| `rule_actions` | Action rows per rule (action_type, value) |
 | `messages_fts` | FTS5 virtual table — subject, from_name, from_email, preview |
 
 ---
@@ -154,6 +163,9 @@ Dev stack: `docker compose up --build` — Caddy proxy on :8585, backend (`cargo
 - **Google Calendar** — syncs after IMAP sync, 7-day week view, event detail with Meet link + attendees
 - **Email↔event linking** — link/unlink emails to calendar events, click linked email to navigate to it
 - **Search across mail + calendar** — FTS5 + BM25 for messages, LIKE for events; unified autocomplete dropdown
+- **Snooze** — per-message snooze with presets (later today / tomorrow morning / next week) + custom datetime; dedicated Snoozed smart folder
+- **Labels** — create labels with color, apply/remove from reading pane, label folders in sidebar
+- **Rules engine** — automation rules with 12 condition types (from/to/subject/body/date/flags/attachments), 6 action types (mark read/unread, flag/unflag, archive, delete, move); applied to new messages on sync; Rules tab in Settings
 - Dark/light theme, 3 density modes, resizable panels
 
 ---
@@ -186,18 +198,17 @@ MSI installer built and shipped via Woodpecker CI (`loungeroomwinOrg` agent, Win
 
 ## What's Not Built Yet
 
-- Rules / filters engine (conditions model done, execution in progress)
-- Snooze (in progress)
-- Labels / tags (in progress)
-- CalDAV sync (providers/caldav.rs is a skeleton)
-- Linux/macOS deployment (Komodo stack)
+- **Command palette** (Ctrl+K) — fuzzy action/folder search, dispatch into store
+- CalDAV sync (`providers/caldav.rs` is a skeleton — non-Google calendars)
+- SMTP improvements: HTML body compose, attachment upload
+- Deployment pipeline (Woodpecker + Komodo stack in ops repo)
 - Mobile-responsive layout
+- Webhooks delivery (`api/webhooks` is scaffolded, delivery not implemented)
 
 ---
 
 ## Immediate Next Steps
 
-1. Rules engine — merge in-progress backend + frontend
-2. Snooze — merge in-progress backend + frontend
-3. Labels — merge in-progress backend + frontend
-4. Deployment — Woodpecker pipeline + Komodo stack in ops repo
+1. Command palette (Ctrl+K) — frontend-only, high UX impact
+2. Deployment — Woodpecker pipeline + Komodo stack in ops repo
+3. CalDAV sync — Fastmail/self-hosted calendar support

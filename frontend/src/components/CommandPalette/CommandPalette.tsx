@@ -6,6 +6,7 @@ type PaletteAction = {
   id: string;
   label: string;
   hint?: string;
+  group?: string;
   keywords: string[];
   handler: () => void;
 };
@@ -30,11 +31,12 @@ function matchScore(action: PaletteAction, query: string): number {
 export function CommandPalette() {
   const {
     paletteOpen, closePalette,
-    folders, accounts,
+    folders, accounts, labels,
     selectedMessageId, messages,
-    setSelectedFolder, openCompose, openSettings,
+    setSelectedFolder, setSelectedLabel, openCompose, openSettings,
     setTheme, setDensity, theme, densityLevel,
     openAdvancedSearch,
+    setView, view,
     patchMessage, removeMessage,
   } = useAppStore();
 
@@ -56,23 +58,22 @@ export function CommandPalette() {
   const actions = useMemo<PaletteAction[]>(() => {
     const list: PaletteAction[] = [];
 
+    // ── Actions ──────────────────────────────────────────────────────────────
     list.push({
       id: 'compose',
       label: 'New Message',
       hint: 'c',
+      group: 'Actions',
       keywords: ['compose', 'write', 'email', 'new'],
       handler: () => {
         if (accounts[0]) openCompose({ accountId: accounts[0].id, to: '', subject: '', mode: 'compose' });
       },
     });
 
-    list.push({ id: 'nav:all',     label: 'Go to All Inboxes', keywords: ['inbox', 'all', 'navigate', 'go'],     handler: () => setSelectedFolder('smart:all') });
-    list.push({ id: 'nav:unread',  label: 'Go to Unread',      keywords: ['unread', 'navigate', 'go'],           handler: () => setSelectedFolder('smart:unread') });
-    list.push({ id: 'nav:flagged', label: 'Go to Flagged',     keywords: ['flagged', 'starred', 'navigate', 'go'], handler: () => setSelectedFolder('smart:flagged') });
-
     list.push({
       id: 'advanced-search',
       label: 'Advanced Search',
+      group: 'Actions',
       keywords: ['search', 'filter', 'find', 'advanced', 'query'],
       handler: openAdvancedSearch,
     });
@@ -80,6 +81,7 @@ export function CommandPalette() {
     list.push({
       id: 'settings',
       label: 'Open Settings',
+      group: 'Actions',
       keywords: ['settings', 'preferences', 'config', 'account', 'options'],
       handler: openSettings,
     });
@@ -87,20 +89,41 @@ export function CommandPalette() {
     list.push({
       id: 'theme-toggle',
       label: theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+      group: 'Actions',
       keywords: ['theme', 'dark', 'light', 'mode', 'appearance', 'color'],
       handler: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
     });
 
-    if (densityLevel > 0) list.push({ id: 'density:down', label: 'Density: Denser', keywords: ['compact', 'dense', 'density', 'view', 'layout'], handler: () => setDensity(densityLevel - 1) });
-    if (densityLevel < 8) list.push({ id: 'density:up',   label: 'Density: More spacious', keywords: ['spacious', 'cozy', 'comfy', 'airy', 'density', 'view', 'layout'], handler: () => setDensity(densityLevel + 1) });
+    if (densityLevel > 0) list.push({ id: 'density:down', label: 'Density: Denser', group: 'Actions', keywords: ['compact', 'dense', 'density', 'view', 'layout'], handler: () => setDensity(densityLevel - 1) });
+    if (densityLevel < 8) list.push({ id: 'density:up',   label: 'Density: Spacious', group: 'Actions', keywords: ['spacious', 'cozy', 'comfy', 'airy', 'density', 'view', 'layout'], handler: () => setDensity(densityLevel + 1) });
+
+    // ── Navigate ─────────────────────────────────────────────────────────────
+    list.push({ id: 'nav:mail',    label: 'Go to Mail',        group: 'Navigate', keywords: ['mail', 'inbox', 'navigate', 'go', 'view'], handler: () => { setView('mail'); } });
+    list.push({ id: 'nav:calendar', label: 'Go to Calendar',   group: 'Navigate', keywords: ['calendar', 'events', 'schedule', 'navigate', 'go', 'view'], handler: () => { setView('calendar'); } });
+    list.push({ id: 'nav:all',     label: 'All Inboxes',       group: 'Navigate', keywords: ['inbox', 'all', 'navigate', 'go'],     handler: () => setSelectedFolder('smart:all') });
+    list.push({ id: 'nav:unread',  label: 'Unread',            group: 'Navigate', keywords: ['unread', 'navigate', 'go'],           handler: () => setSelectedFolder('smart:unread') });
+    list.push({ id: 'nav:flagged', label: 'Flagged',           group: 'Navigate', keywords: ['flagged', 'starred', 'navigate', 'go'], handler: () => setSelectedFolder('smart:flagged') });
+    list.push({ id: 'nav:snoozed', label: 'Snoozed',           group: 'Navigate', keywords: ['snoozed', 'snooze', 'navigate', 'go', 'later'], handler: () => setSelectedFolder('smart:snoozed') });
+
+    for (const lbl of labels) {
+      list.push({
+        id: `label:${lbl.id}`,
+        label: lbl.name,
+        hint: 'label',
+        group: 'Labels',
+        keywords: ['label', 'tag', 'navigate', 'go', lbl.name.toLowerCase()],
+        handler: () => setSelectedLabel(lbl.id),
+      });
+    }
 
     const multiAccount = accounts.length > 1;
     for (const folder of folders.filter((f) => !f.isExcluded)) {
       const account = accounts.find((a) => a.id === folder.accountId);
       list.push({
         id: `folder:${folder.id}`,
-        label: `Go to ${folder.name}`,
-        hint: multiAccount ? account?.email : undefined,
+        label: folder.name,
+        hint: multiAccount ? account?.email : folder.fullPath !== folder.name ? folder.fullPath : undefined,
+        group: 'Folders',
         keywords: ['go', 'folder', 'navigate', folder.name.toLowerCase(), folder.fullPath.toLowerCase()],
         handler: () => setSelectedFolder(folder.id),
       });
@@ -111,6 +134,7 @@ export function CommandPalette() {
         id: 'msg:reply',
         label: 'Reply',
         hint: 'r',
+        group: 'Message',
         keywords: ['reply', 'respond'],
         handler: () => openCompose({
           accountId: selectedMessage.accountId,
@@ -124,6 +148,7 @@ export function CommandPalette() {
         id: 'msg:forward',
         label: 'Forward',
         hint: 'f',
+        group: 'Message',
         keywords: ['forward'],
         handler: () => openCompose({
           accountId: selectedMessage.accountId,
@@ -137,6 +162,7 @@ export function CommandPalette() {
         id: 'msg:archive',
         label: 'Archive Message',
         hint: 'e',
+        group: 'Message',
         keywords: ['archive', 'message'],
         handler: () => fetch(`/api/v1/messages/${selectedMessage.id}/archive`, { method: 'POST' })
           .then(() => removeMessage(selectedMessage.id)),
@@ -145,6 +171,7 @@ export function CommandPalette() {
         id: 'msg:delete',
         label: 'Delete Message',
         hint: '#',
+        group: 'Message',
         keywords: ['delete', 'trash', 'remove'],
         handler: () => fetch(`/api/v1/messages/${selectedMessage.id}`, { method: 'DELETE' })
           .then(() => removeMessage(selectedMessage.id)),
@@ -153,6 +180,7 @@ export function CommandPalette() {
         id: selectedMessage.isRead ? 'msg:mark-unread' : 'msg:mark-read',
         label: selectedMessage.isRead ? 'Mark as Unread' : 'Mark as Read',
         hint: 'u',
+        group: 'Message',
         keywords: ['read', 'unread', 'mark'],
         handler: () => fetch(`/api/v1/messages/${selectedMessage.id}`, {
           method: 'PATCH',
@@ -163,6 +191,7 @@ export function CommandPalette() {
       list.push({
         id: selectedMessage.isFlagged ? 'msg:unflag' : 'msg:flag',
         label: selectedMessage.isFlagged ? 'Remove Flag' : 'Flag Message',
+        group: 'Message',
         keywords: ['flag', 'star', 'unflag'],
         handler: () => fetch(`/api/v1/messages/${selectedMessage.id}`, {
           method: 'PATCH',
@@ -173,22 +202,22 @@ export function CommandPalette() {
     }
 
     return list;
-  }, [folders, accounts, selectedMessage, theme, densityLevel, openCompose, setSelectedFolder, openSettings, setTheme, setDensity, openAdvancedSearch, patchMessage, removeMessage]);
+  }, [folders, accounts, labels, selectedMessage, theme, densityLevel, view, openCompose, setSelectedFolder, setSelectedLabel, setView, openSettings, setTheme, setDensity, openAdvancedSearch, patchMessage, removeMessage]);
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return actions.slice(0, 12);
+    if (!query.trim()) return actions.slice(0, 14);
     return actions
       .map((a) => ({ action: a, score: matchScore(a, query) }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 12)
+      .slice(0, 14)
       .map((x) => x.action);
   }, [actions, query]);
 
   useEffect(() => setActiveIdx(0), [filtered]);
 
   useEffect(() => {
-    const el = listRef.current?.children[activeIdx] as HTMLElement | undefined;
+    const el = listRef.current?.querySelector(`[data-idx="${activeIdx}"]`) as HTMLElement | null;
     el?.scrollIntoView({ block: 'nearest' });
   }, [activeIdx]);
 
@@ -240,17 +269,26 @@ export function CommandPalette() {
         </div>
         {filtered.length > 0 ? (
           <div className={styles.results} ref={listRef}>
-            {filtered.map((action, i) => (
-              <div
-                key={action.id}
-                className={`${styles.item} ${i === activeIdx ? styles.active : ''}`}
-                onMouseEnter={() => setActiveIdx(i)}
-                onMouseDown={(e) => { e.preventDefault(); action.handler(); closePalette(); }}
-              >
-                <span className={styles.label}>{action.label}</span>
-                {action.hint && <span className={styles.hint}>{action.hint}</span>}
-              </div>
-            ))}
+            {filtered.map((action, i) => {
+              const isFirstItem = i === 0;
+              const showHeader = !query.trim() && (isFirstItem || filtered[i - 1].group !== action.group);
+              return (
+                <div key={action.id}>
+                  {showHeader && action.group && (
+                    <div className={`${styles.groupHeader} ${isFirstItem ? '' : styles.groupHeaderBorder}`}>{action.group}</div>
+                  )}
+                  <div
+                    data-idx={i}
+                    className={`${styles.item} ${i === activeIdx ? styles.active : ''}`}
+                    onMouseEnter={() => setActiveIdx(i)}
+                    onMouseDown={(e) => { e.preventDefault(); action.handler(); closePalette(); }}
+                  >
+                    <span className={styles.label}>{action.label}</span>
+                    {action.hint && <span className={styles.hint}>{action.hint}</span>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className={styles.empty}>No results for &ldquo;{query}&rdquo;</div>

@@ -108,6 +108,21 @@
   text-overflow: ellipsis;
 }
 
+.groupHeader {
+  padding: 6px 10px 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-xdim);
+}
+
+.groupHeaderBorder {
+  margin-top: 4px;
+  border-top: 1px solid var(--divider);
+  padding-top: 8px;
+}
+
 .empty {
   padding: 24px 16px;
   text-align: center;
