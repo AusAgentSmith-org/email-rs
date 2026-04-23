@@ -69,7 +69,7 @@ const handleStyle: React.CSSProperties = {
 };
 
 export function App() {
-  const { theme, densityLevel, accounts, setAccounts, compose, settingsOpen, openPalette, closePalette, paletteOpen, view } = useAppStore();
+  const { theme, densityLevel, accounts, setAccounts, folders, compose, settingsOpen, openPalette, closePalette, paletteOpen, view } = useAppStore();
   const [accountsLoaded, setAccountsLoaded] = useState(false);
 
   const sidebar = usePanelResize(SIDEBAR_W_KEY,  DEFAULT_SIDEBAR_W, MIN_W, MAX_SIDEBAR_W);
@@ -77,6 +77,12 @@ export function App() {
 
   useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
   useEffect(() => { applyDensity(densityLevel); }, [densityLevel]);
+
+  // Reflect total unread count in the browser tab title.
+  useEffect(() => {
+    const total = folders.reduce((n, f) => n + (f.unreadCount ?? 0), 0);
+    document.title = total > 0 ? `(${total}) email-rs` : 'email-rs';
+  }, [folders]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

@@ -427,6 +427,20 @@ export function MessageList() {
           {isSearching && messages.length > 0 && (
             <span className={styles.unreadBadge}>{messages.length}</span>
           )}
+          {!isSearching && !isAdvancedSearching && selectedFolderId && !isSmartFolder && !isLabelFolder && unreadCount > 0 && (
+            <button
+              type="button"
+              className={styles.markAllReadBtn}
+              title="Mark all as read"
+              onClick={() => {
+                fetch(`/api/v1/folders/${selectedFolderId}/mark-read`, { method: 'POST' })
+                  .then(() => refetch())
+                  .catch(() => undefined);
+              }}
+            >
+              Mark all read
+            </button>
+          )}
         </div>
       )}
 

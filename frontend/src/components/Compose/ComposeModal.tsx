@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import styles from './ComposeModal.module.css';
+import { RecipientInput } from './RecipientInput';
 import { useAppStore } from '../../store';
 import type { AccountSettings } from '../../types';
 
@@ -90,11 +91,9 @@ export function ComposeModal() {
       <div className={styles.fields}>
         <div className={styles.fieldRow}>
           <span className={styles.fieldLabel}>To</span>
-          <input
-            className={styles.fieldInput}
-            type="text"
+          <RecipientInput
             value={to}
-            onChange={(e) => setTo(e.target.value)}
+            onChange={setTo}
             placeholder="recipient@example.com"
             autoFocus={!to}
           />
@@ -106,27 +105,13 @@ export function ComposeModal() {
         {showCc && (
           <div className={styles.fieldRow}>
             <span className={styles.fieldLabel}>Cc</span>
-            <input
-              className={styles.fieldInput}
-              type="text"
-              value={cc}
-              onChange={(e) => setCc(e.target.value)}
-              placeholder="cc@example.com"
-              autoFocus
-            />
+            <RecipientInput value={cc} onChange={setCc} placeholder="cc@example.com" autoFocus />
           </div>
         )}
         {showBcc && (
           <div className={styles.fieldRow}>
             <span className={styles.fieldLabel}>Bcc</span>
-            <input
-              className={styles.fieldInput}
-              type="text"
-              value={bcc}
-              onChange={(e) => setBcc(e.target.value)}
-              placeholder="bcc@example.com"
-              autoFocus={!showCc}
-            />
+            <RecipientInput value={bcc} onChange={setBcc} placeholder="bcc@example.com" autoFocus={!showCc} />
           </div>
         )}
         <div className={styles.fieldRow}>
