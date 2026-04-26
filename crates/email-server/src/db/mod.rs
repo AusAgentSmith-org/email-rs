@@ -195,6 +195,21 @@ async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<()> {
         }
     }
 
+    let migration_011 = include_str!("migrations/011_accounts_unique.sql");
+    for statement in migration_011.split(';') {
+        let trimmed = statement.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Err(e) = sqlx::query(trimmed).execute(pool).await {
+            let msg = e.to_string();
+            if msg.contains("already exists") || msg.contains("duplicate") {
+                continue;
+            }
+            return Err(e.into());
+        }
+    }
+
     Ok(())
 }
 
