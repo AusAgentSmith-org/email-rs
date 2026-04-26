@@ -1,0 +1,27 @@
+const BASE = '/api/v1';
+
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json() as Promise<T>;
+}
+
+async function patch(path: string, body: unknown): Promise<void> {
+  await fetch(`${BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export const api = {
+  accounts:    () => get('/accounts'),
+  folders:     (accountId: string) => get(`/folders?account_id=${accountId}`),
+  messages:    (folderId: string, page = 1) => get(`/messages?folder_id=${folderId}&page=${page}&per_page=40`),
+  message:     (id: string) => get(`/messages/${id}`),
+  search:      (q: string) => get(`/search?q=${encodeURIComponent(q)}&limit=40`),
+  markRead:    (id: string) => patch(`/messages/${id}`, { is_read: true }),
+  flag:        (id: string, val: boolean) => patch(`/messages/${id}`, { is_flagged: val }),
+  archive:     (id: string) => patch(`/messages/${id}/archive`, {}),
+  trash:       (id: string) => patch(`/messages/${id}/trash`, {}),
+};
