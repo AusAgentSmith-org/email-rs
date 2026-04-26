@@ -65,6 +65,7 @@ steps:
     commands:
       - |
         $ErrorActionPreference = 'Stop'
+        Set-ExecutionPolicy Bypass -Scope Process -Force
 
         # Strip [patch] sections (local dev overrides; registry packages in CI)
         foreach ($file in @("Cargo.toml", "crates\email-server\Cargo.toml")) {
