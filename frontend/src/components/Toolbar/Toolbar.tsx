@@ -1,12 +1,15 @@
 import styles from './Toolbar.module.css';
 import { useAppStore } from '../../store';
 
-function GearIcon() {
+function GearIcon({ theme }: { theme: string }) {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" width="15" height="15">
-      <circle cx="8" cy="8" r="2.5" />
-      <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.22 3.22l1.42 1.42M11.36 11.36l1.42 1.42M3.22 12.78l1.42-1.42M11.36 4.64l1.42-1.42" strokeLinecap="round" />
-    </svg>
+    <img
+      src={theme === 'dark' ? '/icons/settings-dark.png' : '/icons/settings-light.png'}
+      alt=""
+      width="15"
+      height="15"
+      style={{ display: 'block' }}
+    />
   );
 }
 
@@ -70,7 +73,7 @@ export function Toolbar() {
         onClick={openSettings}
         aria-label="Settings"
       >
-        <GearIcon />
+        <GearIcon theme={theme} />
       </button>
     </div>
   );

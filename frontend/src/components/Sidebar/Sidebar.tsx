@@ -123,12 +123,15 @@ function ComposeIcon() {
   );
 }
 
-function GearIcon() {
+function GearIcon({ theme }: { theme: string }) {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" width="14" height="14">
-      <circle cx="8" cy="8" r="2.5" />
-      <path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.3 3.3l1 1M11.7 11.7l1 1M3.3 12.7l1-1M11.7 4.3l1-1" />
-    </svg>
+    <img
+      src={theme === 'dark' ? '/icons/settings-dark.png' : '/icons/settings-light.png'}
+      alt=""
+      width="14"
+      height="14"
+      style={{ display: 'block' }}
+    />
   );
 }
 
@@ -758,7 +761,7 @@ export function Sidebar({ onAccountAdded }: SidebarProps) {
             title="Settings"
             onClick={openSettings}
           >
-            <GearIcon />
+            <GearIcon theme={theme} />
           </button>
         </div>
       </div>
