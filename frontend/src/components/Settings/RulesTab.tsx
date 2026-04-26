@@ -242,8 +242,14 @@ export function RulesTab({ accountId }: RulesTabProps) {
 
   const load = useCallback(() => {
     fetch(`/api/v1/rules?account_id=${encodeURIComponent(accountId)}`)
-      .then((r) => r.json())
-      .then((data: RuleDto[]) => setRules(data))
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data: RuleDto[]) => {
+        setRules(data);
+        setError(null);
+      })
       .catch(() => setError('Failed to load rules'));
   }, [accountId]);
 
@@ -284,7 +290,7 @@ export function RulesTab({ accountId }: RulesTabProps) {
         <>
           {error && <div className={styles.error}>{error}</div>}
 
-          {rules.length === 0 ? (
+          {!error && rules.length === 0 ? (
             <div className={styles.empty}>No rules configured for this account.</div>
           ) : (
             <div className={styles.ruleList}>
