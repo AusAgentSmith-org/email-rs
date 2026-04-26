@@ -54,6 +54,11 @@
   flex-shrink: 0;
 }
 
+.tabSpacer {
+  min-width: 56px;
+  flex: 1;
+}
+
 .svgIcon {
   opacity: 0.5;
   color: var(--text-mid);

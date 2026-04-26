@@ -27,4 +27,5 @@ export const api = {
   accountSettings: (accountId: string) => get(`/accounts/${accountId}/settings`),
   updateAccount:   (accountId: string, body: { sync_days_limit?: number | null }) => patch(`/accounts/${accountId}`, body),
   updateFolder:    (folderId: string, body: { is_excluded?: boolean }) => patch(`/folders/${folderId}`, body),
+  contactSuggest:  (q: string) => get<{ name: string | null; email: string }[]>(`/contacts/suggest?q=${encodeURIComponent(q)}`),
 };

@@ -65,6 +65,64 @@
 
 .headerBtn:active { background: var(--row-hover); }
 
+/* ── Search bar ── */
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.searchRowActive {
+  padding-top: calc(var(--safe-top) + 8px);
+}
+
+.searchBox {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 7px 10px;
+  min-width: 0;
+}
+
+.searchIcon {
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.searchInput {
+  flex: 1;
+  font-size: 15px;
+  color: var(--text);
+  background: transparent;
+  min-width: 0;
+}
+
+.searchInput::placeholder { color: var(--text-dim); }
+
+.clearBtn {
+  display: flex;
+  align-items: center;
+  color: var(--text-dim);
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.cancelBtn {
+  font-size: 15px;
+  color: var(--accent);
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 4px 2px;
+}
+
 .list {
   flex: 1;
   overflow-y: auto;

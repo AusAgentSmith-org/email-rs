@@ -53,4 +53,4 @@ export interface MessageBody {
   body: { htmlBody: string | null; textBody: string | null } | null;
 }
 
-export type Screen = 'inbox' | 'search' | 'compose' | 'calendar' | 'profile';
+export type Screen = 'inbox' | 'compose' | 'calendar' | 'profile';

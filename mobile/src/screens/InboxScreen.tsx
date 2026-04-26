@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import styles from './InboxScreen.module.css';
 import { MailRow } from '../components/MailRow';
 import { FolderDrawer } from '../components/FolderDrawer';
@@ -16,11 +16,23 @@ function getInbox(folders: Folder[]): Folder | null {
 
 export function InboxScreen() {
   const { accounts, setAccounts, folders, setFolders, selectedFolderId, setSelectedFolder, setSelectedMessage, theme } = useAppStore();
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Message[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const isSearching = searchFocused || searchQuery.length > 0;
+
+  // Load accounts + folders on mount
   useEffect(() => {
     (async () => {
       try {
@@ -51,6 +63,27 @@ export function InboxScreen() {
     loadMessages(selectedFolderId);
   }, [selectedFolderId, loadMessages]);
 
+  const handleSearchChange = (q: string) => {
+    setSearchQuery(q);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!q.trim()) { setSearchResults([]); return; }
+    searchTimer.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const r = await api.search(q) as { messages: Message[] };
+        setSearchResults(r.messages ?? []);
+      } catch { setSearchResults([]); }
+      setSearchLoading(false);
+    }, 300);
+  };
+
+  const cancelSearch = () => {
+    setSearchQuery('');
+    setSearchResults([]);
+    setSearchFocused(false);
+    searchInputRef.current?.blur();
+  };
+
   const handleRefresh = async () => {
     if (!selectedFolderId || refreshing) return;
     setRefreshing(true);
@@ -61,34 +94,73 @@ export function InboxScreen() {
   const activeFolder = folders.find((f) => f.id === selectedFolderId);
   const unread = messages.filter((m) => !m.isRead).length;
 
+  // Which list to show
+  const listMessages = isSearching ? searchResults : messages;
+  const listLoading  = isSearching ? searchLoading  : loading;
+
   return (
     <div className={styles.screen}>
-      {/* Header */}
-      <header className={styles.header}>
-        <button className={styles.folderBtn} onClick={() => setDrawerOpen(true)} aria-label="Browse folders">
-          <svg viewBox="0 0 20 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" width="20" height="16">
-            <path d="M1 3h18M1 8h18M1 13h18" />
-          </svg>
-        </button>
+      {/* Header — hidden while searching */}
+      {!isSearching && (
+        <header className={styles.header}>
+          <button className={styles.folderBtn} onClick={() => setDrawerOpen(true)} aria-label="Browse folders">
+            <svg viewBox="0 0 20 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" width="20" height="16">
+              <path d="M1 3h18M1 8h18M1 13h18" />
+            </svg>
+          </button>
+          <div className={styles.headerCenter}>
+            <span className={styles.folderName}>{activeFolder?.name ?? 'Mail'}</span>
+            {unread > 0 && <span className={styles.badge}>{unread} unread</span>}
+          </div>
+          <button className={styles.headerBtn} onClick={handleRefresh} aria-label="Refresh">
+            <img src={theme === 'dark' ? '/icons/refresh-dark.png' : '/icons/refresh-light.png'} alt="" width="20" height="20" />
+          </button>
+        </header>
+      )}
 
-        <div className={styles.headerCenter}>
-          <span className={styles.folderName}>{activeFolder?.name ?? 'Mail'}</span>
-          {unread > 0 && <span className={styles.badge}>{unread} unread</span>}
-        </div>
-
-        <button className={styles.headerBtn} onClick={handleRefresh} aria-label="Refresh">
-          <img
-            src={theme === 'dark' ? '/icons/refresh-dark.png' : '/icons/refresh-light.png'}
-            alt="" width="20" height="20"
+      {/* Search bar */}
+      <div className={`${styles.searchRow} ${isSearching ? styles.searchRowActive : ''}`}>
+        <div className={styles.searchBox}>
+          <img src={theme === 'dark' ? '/icons/search-dark.png' : '/icons/search-light.png'} alt="" width="16" height="16" className={styles.searchIcon} />
+          <input
+            ref={searchInputRef}
+            className={styles.searchInput}
+            type="search"
+            placeholder="Search mail…"
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
           />
-        </button>
-      </header>
+          {searchQuery && (
+            <button className={styles.clearBtn} onClick={() => handleSearchChange('')} aria-label="Clear">
+              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" width="12" height="12">
+                <path d="M1 1l10 10M11 1L1 11" />
+              </svg>
+            </button>
+          )}
+        </div>
+        {isSearching && (
+          <button className={styles.cancelBtn} onClick={cancelSearch}>Cancel</button>
+        )}
+      </div>
 
-      {/* Message list */}
+      {/* Message / search list */}
       <div className={`${styles.list} scroll`}>
-        {loading && <div className={styles.empty}>Loading…</div>}
-        {!loading && messages.length === 0 && <div className={styles.empty}>No messages</div>}
-        {!loading && messages.map((msg) => (
+        {listLoading && <div className={styles.empty}>Loading…</div>}
+
+        {!listLoading && isSearching && !searchQuery && (
+          <div className={styles.empty}>Type to search your mail</div>
+        )}
+
+        {!listLoading && isSearching && searchQuery && listMessages.length === 0 && (
+          <div className={styles.empty}>No results for "{searchQuery}"</div>
+        )}
+
+        {!listLoading && !isSearching && listMessages.length === 0 && (
+          <div className={styles.empty}>No messages</div>
+        )}
+
+        {!listLoading && listMessages.map((msg) => (
           <MailRow key={msg.id} message={msg} onClick={() => setSelectedMessage(msg)} />
         ))}
         <div className={styles.listPad} />

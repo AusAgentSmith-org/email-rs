@@ -15,7 +15,6 @@ function CalendarIcon() {
 interface PngTab { id: Screen; label: string; icon: string; iconDark: string; }
 const PNG_TABS: PngTab[] = [
   { id: 'inbox',   label: 'Inbox',   icon: '/icons/inbox-open-light.png', iconDark: '/icons/inbox-open-dark.png' },
-  { id: 'search',  label: 'Search',  icon: '/icons/search-light.png',     iconDark: '/icons/search-dark.png' },
   { id: 'profile', label: 'Profile', icon: '/icons/profile-light.png',    iconDark: '/icons/profile-dark.png' },
 ];
 
@@ -24,23 +23,16 @@ export function BottomNav() {
 
   return (
     <nav className={styles.nav}>
-      {/* Inbox + Search on left of FAB */}
-      {PNG_TABS.slice(0, 2).map((tab) => (
-        <button
-          key={tab.id}
-          className={`${styles.tab} ${screen === tab.id ? styles.active : ''}`}
-          onClick={() => setScreen(tab.id)}
-          aria-label={tab.label}
-        >
-          <img src={theme === 'dark' ? tab.iconDark : tab.icon} alt="" className={styles.icon} />
-          <span className={styles.label}>{tab.label}</span>
-        </button>
-      ))}
+      {/* Inbox on left of FAB */}
+      <button
+        className={`${styles.tab} ${screen === 'inbox' ? styles.active : ''}`}
+        onClick={() => setScreen('inbox')}
+        aria-label="Inbox"
+      >
+        <img src={theme === 'dark' ? PNG_TABS[0].iconDark : PNG_TABS[0].icon} alt="" className={styles.icon} />
+        <span className={styles.label}>Inbox</span>
+      </button>
 
-      {/* FAB placeholder — rendered as absolute overlay below */}
-      <div className={styles.fabPlaceholder} />
-
-      {/* Calendar + Profile on right of FAB */}
       <button
         className={`${styles.tab} ${screen === 'calendar' ? styles.active : ''}`}
         onClick={() => setScreen('calendar')}
@@ -51,17 +43,21 @@ export function BottomNav() {
         </span>
         <span className={styles.label}>Calendar</span>
       </button>
-      {PNG_TABS.slice(2).map((tab) => (
-        <button
-          key={tab.id}
-          className={`${styles.tab} ${screen === tab.id ? styles.active : ''}`}
-          onClick={() => setScreen(tab.id)}
-          aria-label={tab.label}
-        >
-          <img src={theme === 'dark' ? tab.iconDark : tab.icon} alt="" className={styles.icon} />
-          <span className={styles.label}>{tab.label}</span>
-        </button>
-      ))}
+
+      {/* FAB placeholder */}
+      <div className={styles.fabPlaceholder} />
+
+      {/* Profile on right of FAB */}
+      <button
+        className={`${styles.tab} ${screen === 'profile' ? styles.active : ''}`}
+        onClick={() => setScreen('profile')}
+        aria-label="Profile"
+      >
+        <img src={theme === 'dark' ? PNG_TABS[1].iconDark : PNG_TABS[1].icon} alt="" className={styles.icon} />
+        <span className={styles.label}>Profile</span>
+      </button>
+
+      <div className={styles.tabSpacer} />
 
       <button className={styles.fab} onClick={openCompose} aria-label="Compose">
         <svg viewBox="0 0 20 20" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" width="20" height="20">

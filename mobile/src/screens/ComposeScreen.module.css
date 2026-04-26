@@ -80,6 +80,48 @@
 
 .fieldInput::placeholder { color: var(--text-xdim); }
 
+/* ── To-field autocomplete ── */
+.toFieldWrap {
+  position: relative;
+}
+
+.suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.suggestionBtn {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 16px;
+  gap: 1px;
+  transition: background 80ms;
+}
+
+.suggestionBtn:active {
+  background: var(--row-hover);
+}
+
+.suggName {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.suggEmail {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
 .divider {
   height: 1px;
   background: var(--border);

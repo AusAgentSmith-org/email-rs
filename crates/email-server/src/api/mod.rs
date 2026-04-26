@@ -75,6 +75,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/events", get(events::sse_events))
         .route("/search", get(search::search_messages))
         .route("/search/suggest", get(search::suggest_messages))
+        .route("/contacts/suggest", get(search::suggest_contacts))
         .route(
             "/smart-folders/{kind}/messages",
             get(smart_folders::list_smart_messages),

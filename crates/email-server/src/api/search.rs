@@ -343,6 +343,45 @@ async fn search_calendar_events(
     }
 }
 
+// ── Contact suggest ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct ContactRow {
+    pub name: Option<String>,
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ContactQuery {
+    pub q: String,
+}
+
+pub async fn suggest_contacts(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ContactQuery>,
+) -> Result<Json<Vec<ContactRow>>> {
+    let term = params.q.trim();
+    if term.len() < 2 {
+        return Ok(Json(vec![]));
+    }
+    let q = format!("%{term}%");
+    let rows = sqlx::query_as::<_, ContactRow>(
+        r#"SELECT from_name AS name, from_email AS email
+           FROM messages
+           WHERE from_email IS NOT NULL
+             AND (from_email LIKE ? OR from_name LIKE ?)
+           GROUP BY from_email
+           ORDER BY MAX(date) DESC
+           LIMIT 10"#,
+    )
+    .bind(&q)
+    .bind(&q)
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(rows))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{fts_prefix_query, fts_query};
