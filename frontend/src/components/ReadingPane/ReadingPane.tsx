@@ -139,7 +139,7 @@ function injectEmailBase(html: string, dark: boolean): string {
 }
 
 export function ReadingPane() {
-  const { selectedMessageId, setSelectedMessage, openCompose, theme, accounts } = useAppStore();
+  const { selectedMessageId, setSelectedMessage, openCompose, theme, accounts, patchMessage } = useAppStore();
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -169,6 +169,11 @@ export function ReadingPane() {
 
   // Reset local overrides when message changes.
   useEffect(() => { setLocalRead(null); setShowLabelDropdown(false); }, [selectedMessageId]);
+
+  // Sync read state back to the message list when a message is opened.
+  useEffect(() => {
+    if (message?.id) patchMessage(message.id, { isRead: true });
+  }, [message?.id, patchMessage]);
 
   const isRead = localRead ?? message?.isRead ?? true;
 
