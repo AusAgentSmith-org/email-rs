@@ -16,8 +16,8 @@ async function patch(path: string, body: unknown): Promise<void> {
 
 export const api = {
   accounts:    () => get('/accounts'),
-  folders:     (accountId: string) => get(`/folders?account_id=${accountId}`),
-  messages:    (folderId: string, page = 1) => get(`/messages?folder_id=${folderId}&page=${page}&per_page=40`),
+  folders:     (accountId: string) => get(`/accounts/${accountId}/folders`),
+  messages:    (folderId: string, page = 1) => get(`/folders/${folderId}/messages?page=${page}&per_page=40`),
   message:     (id: string) => get(`/messages/${id}`),
   search:      (q: string) => get(`/search?q=${encodeURIComponent(q)}&limit=40`),
   markRead:    (id: string) => patch(`/messages/${id}`, { is_read: true }),
