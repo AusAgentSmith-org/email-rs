@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import styles from './InboxScreen.module.css';
 import { MailRow } from '../components/MailRow';
+import { FolderDrawer } from '../components/FolderDrawer';
 import { useAppStore } from '../store';
 import { api } from '../api/client';
 import type { Account, Folder, Message } from '../types';
 
 function getInbox(folders: Folder[]): Folder | null {
   return (
-    folders.find((f) => f.specialUse === 'Inbox') ??
+    folders.find((f) => f.specialUse?.toLowerCase() === 'inbox') ??
     folders.find((f) => f.name.toLowerCase() === 'inbox') ??
     null
   );
@@ -18,9 +19,8 @@ export function InboxScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeFolder, setActiveFolder] = useState<Folder | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Load accounts + folders on mount
   useEffect(() => {
     (async () => {
       try {
@@ -48,10 +48,8 @@ export function InboxScreen() {
 
   useEffect(() => {
     if (!selectedFolderId) return;
-    const folder = folders.find((f) => f.id === selectedFolderId) ?? null;
-    setActiveFolder(folder);
     loadMessages(selectedFolderId);
-  }, [selectedFolderId, folders, loadMessages]);
+  }, [selectedFolderId, loadMessages]);
 
   const handleRefresh = async () => {
     if (!selectedFolderId || refreshing) return;
@@ -60,58 +58,51 @@ export function InboxScreen() {
     setRefreshing(false);
   };
 
+  const activeFolder = folders.find((f) => f.id === selectedFolderId);
   const unread = messages.filter((m) => !m.isRead).length;
 
   return (
     <div className={styles.screen}>
       {/* Header */}
       <header className={styles.header}>
-        <div className={styles.headerLeft}>
-          <span className={styles.appName}>rsMail</span>
-          {unread > 0 && <span className={styles.badge}>{unread}</span>}
-        </div>
-        <div className={styles.headerRight}>
-          <button className={styles.headerBtn} onClick={handleRefresh} aria-label="Refresh">
-            <img
-              src={theme === 'dark' ? '/icons/refresh-dark.png' : '/icons/refresh-light.png'}
-              alt=""
-              width="20" height="20"
-            />
-          </button>
-        </div>
-      </header>
+        <button className={styles.folderBtn} onClick={() => setDrawerOpen(true)} aria-label="Browse folders">
+          <svg viewBox="0 0 20 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" width="20" height="16">
+            <path d="M1 3h18M1 8h18M1 13h18" />
+          </svg>
+        </button>
 
-      {/* Folder chips */}
-      <div className={styles.folderBar}>
-        {folders.filter((f) => f.specialUse || ['inbox','sent','drafts','trash','spam'].includes(f.name.toLowerCase())).slice(0, 8).map((f) => (
-          <button
-            key={f.id}
-            className={`${styles.chip} ${selectedFolderId === f.id ? styles.chipActive : ''}`}
-            onClick={() => setSelectedFolder(f.id)}
-          >
-            {f.name}
-            {f.unreadCount > 0 && <span className={styles.chipCount}>{f.unreadCount}</span>}
-          </button>
-        ))}
-      </div>
+        <div className={styles.headerCenter}>
+          <span className={styles.folderName}>{activeFolder?.name ?? 'Mail'}</span>
+          {unread > 0 && <span className={styles.badge}>{unread} unread</span>}
+        </div>
+
+        <button className={styles.headerBtn} onClick={handleRefresh} aria-label="Refresh">
+          <img
+            src={theme === 'dark' ? '/icons/refresh-dark.png' : '/icons/refresh-light.png'}
+            alt="" width="20" height="20"
+          />
+        </button>
+      </header>
 
       {/* Message list */}
       <div className={`${styles.list} scroll`}>
-        {loading && (
-          <div className={styles.empty}>Loading…</div>
-        )}
-        {!loading && messages.length === 0 && (
-          <div className={styles.empty}>No messages</div>
-        )}
+        {loading && <div className={styles.empty}>Loading…</div>}
+        {!loading && messages.length === 0 && <div className={styles.empty}>No messages</div>}
         {!loading && messages.map((msg) => (
-          <MailRow
-            key={msg.id}
-            message={msg}
-            onClick={() => setSelectedMessage(msg)}
-          />
+          <MailRow key={msg.id} message={msg} onClick={() => setSelectedMessage(msg)} />
         ))}
         <div className={styles.listPad} />
       </div>
+
+      {/* Folder drawer */}
+      {drawerOpen && (
+        <FolderDrawer
+          folders={folders}
+          selectedId={selectedFolderId}
+          onSelect={setSelectedFolder}
+          onClose={() => setDrawerOpen(false)}
+        />
+      )}
     </div>
   );
 }

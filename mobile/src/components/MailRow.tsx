@@ -47,7 +47,10 @@ export function MailRow({ message: msg, onClick }: Props) {
           <span className={styles.date}>{relativeDate(msg.date)}</span>
         </div>
         <div className={styles.subject}>{msg.subject ?? '(no subject)'}</div>
-        <div className={styles.preview}>{msg.preview ?? ''}</div>
+        {msg.preview
+          ? <div className={styles.preview}>{msg.preview}</div>
+          : <div className={`${styles.preview} ${styles.previewEmpty}`}>No preview available</div>
+        }
       </div>
 
       {/* Indicators */}

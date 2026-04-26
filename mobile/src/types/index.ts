@@ -15,6 +15,14 @@ export interface Folder {
   specialUse: string | null;
   unreadCount: number;
   totalCount: number;
+  isExcluded: boolean;
+}
+
+export interface AccountSettings {
+  id: string;
+  name: string;
+  email: string;
+  syncDaysLimit: number | null;
 }
 
 export interface Message {
