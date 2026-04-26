@@ -382,7 +382,7 @@ impl ImapSyncEngine {
 }
 
 /// Fetch and store all messages for a single folder. Runs in parallel with other folders.
-async fn sync_folder<P: MailProvider>(
+async fn sync_folder<P: MailProvider + Clone + Send + Sync + 'static>(
     provider: P,
     pool: SqlitePool,
     account_id: &str,
@@ -540,5 +540,91 @@ async fn sync_folder<P: MailProvider>(
     .execute(&pool)
     .await?;
 
+    // Background: pre-fetch bodies for the most recent uncached messages so they open instantly.
+    let pf_provider = provider;
+    let pf_pool = pool;
+    let pf_folder_id = db_folder.id;
+    let pf_folder_path = db_folder.full_path;
+    tokio::spawn(async move {
+        prefetch_uncached_bodies(pf_provider, pf_pool, &pf_folder_id, &pf_folder_path).await;
+    });
+
     Ok(())
+}
+
+/// Pre-fetch and cache bodies for up to PREFETCH_LIMIT recent messages that have no cached body.
+const PREFETCH_LIMIT: i64 = 50;
+
+async fn prefetch_uncached_bodies<P: MailProvider>(
+    provider: P,
+    pool: SqlitePool,
+    folder_id: &str,
+    folder_path: &str,
+) {
+    #[derive(sqlx::FromRow)]
+    struct UncachedMsg {
+        id: String,
+        uid: i64,
+    }
+
+    let uncached = match sqlx::query_as::<_, UncachedMsg>(
+        r#"SELECT m.id, m.uid FROM messages m
+           LEFT JOIN message_bodies mb ON mb.message_id = m.id
+           WHERE m.folder_id = ? AND mb.message_id IS NULL
+           ORDER BY m.date DESC
+           LIMIT ?"#,
+    )
+    .bind(folder_id)
+    .bind(PREFETCH_LIMIT)
+    .fetch_all(&pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            warn!("body prefetch query failed for {}: {}", folder_path, e);
+            return;
+        }
+    };
+
+    if uncached.is_empty() {
+        return;
+    }
+
+    let uids: Vec<u32> = uncached.iter().map(|r| r.uid as u32).collect();
+    let id_by_uid: std::collections::HashMap<u32, String> =
+        uncached.into_iter().map(|r| (r.uid as u32, r.id)).collect();
+
+    info!(
+        "pre-fetching {} bodies for folder {}",
+        uids.len(),
+        folder_path
+    );
+
+    match provider.fetch_bodies_batch(folder_path, &uids).await {
+        Ok(bodies) => {
+            let fetched = bodies.len();
+            for (uid, body) in bodies {
+                if let Some(msg_id) = id_by_uid.get(&uid) {
+                    if let Err(e) = sqlx::query(
+                        r#"INSERT INTO message_bodies (message_id, html_body, text_body, raw_headers)
+                           VALUES (?, ?, ?, ?)
+                           ON CONFLICT(message_id) DO NOTHING"#,
+                    )
+                    .bind(msg_id)
+                    .bind(&body.html_body)
+                    .bind(&body.text_body)
+                    .bind(&body.raw_headers)
+                    .execute(&pool)
+                    .await
+                    {
+                        warn!("failed to store prefetched body uid {}: {}", uid, e);
+                    }
+                }
+            }
+            info!("pre-fetched {} bodies for folder {}", fetched, folder_path);
+        }
+        Err(e) => {
+            warn!("body pre-fetch failed for folder {}: {}", folder_path, e);
+        }
+    }
 }
