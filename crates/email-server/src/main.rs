@@ -123,22 +123,34 @@ fn run_desktop(port: u16, log: &std::path::Path) -> anyhow::Result<()> {
     let menu = Menu::new();
     menu.append_items(&[&open_item, &PredefinedMenuItem::separator(), &quit_item])?;
 
-    let icon_rgba: Vec<u8> = (0..32u32 * 32)
-        .flat_map(|_| [0x26u8, 0x8Bu8, 0xD2u8, 0xFFu8])
-        .collect();
+    let icon_bytes = include_bytes!("../icons/mail_32.png");
+    let icon_img = image::load_from_memory(icon_bytes)
+        .expect("valid mail_32.png")
+        .to_rgba8();
+    let (icon_w, icon_h) = icon_img.dimensions();
+    let icon_rgba = icon_img.into_raw();
 
     let _tray = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
         .with_tooltip("email-rs")
-        .with_icon(tray_icon::Icon::from_rgba(icon_rgba, 32, 32)?)
+        .with_icon(tray_icon::Icon::from_rgba(icon_rgba, icon_w, icon_h)?)
         .build()?;
 
     // Wait for the Axum server to bind before opening the window
     wait_for_server_ready(port, log);
 
+    let window_icon = {
+        let img = image::load_from_memory(include_bytes!("../icons/mail_32.png"))
+            .expect("valid mail_32.png")
+            .to_rgba8();
+        let (w, h) = img.dimensions();
+        tao::window::Icon::from_rgba(img.into_raw(), w, h).ok()
+    };
+
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("email-rs")
+        .with_window_icon(window_icon)
         .with_inner_size(LogicalSize::new(1280u32, 800u32))
         .with_min_inner_size(LogicalSize::new(800u32, 600u32))
         .build(&event_loop)?;

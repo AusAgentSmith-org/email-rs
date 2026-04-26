@@ -40,6 +40,10 @@ dotenvy = "0.15"
 tray-icon = "0.19"
 tao = "0.30"
 wry = "0.47"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[build-dependencies]
+winres = "0.1"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
