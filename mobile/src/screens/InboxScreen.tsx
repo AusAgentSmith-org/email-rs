@@ -26,12 +26,13 @@ export function InboxScreen() {
       try {
         const accs = await api.accounts() as Account[];
         setAccounts(accs);
-        if (accs.length === 0) return;
+        if (accs.length === 0) { setLoading(false); return; }
         const allFolders = (await Promise.all(accs.map((a) => api.folders(a.id) as Promise<Folder[]>))).flat();
         setFolders(allFolders);
         const inbox = getInbox(allFolders);
         if (inbox) setSelectedFolder(inbox.id);
-      } catch { /* ignore */ }
+        else setLoading(false);
+      } catch { setLoading(false); }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
