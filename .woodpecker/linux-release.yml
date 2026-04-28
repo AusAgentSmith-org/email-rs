@@ -1,0 +1,126 @@
+# Builds a static Linux binary (musl), a Docker image, and uploads both to the
+# Forgejo release. Runs on a Linux Docker agent.
+#
+# The binary tarball (email-rs-linux-x86_64.tar.gz) contains:
+#   email-server   — the server binary (statically linked, no libc dep)
+#   static/        — pre-built React frontend assets
+#
+# Run the server:
+#   FRONTEND_DIST=./static ./email-server
+when:
+  - event: tag
+    ref: refs/tags/v*
+  - event: manual
+
+steps:
+  # ── Build frontend (for the binary tarball) ───────────────────────────────────
+  - name: build-frontend
+    image: node:22-alpine
+    commands:
+      - cd frontend && npm ci
+      - cd frontend && npx vite build --outDir ../release/static --emptyOutDir
+
+  # ── Build static Linux binary (musl — no glibc dependency) ───────────────────
+  - name: build-binary
+    image: rust:alpine
+    depends_on: [build-frontend]
+    commands:
+      - apk add --no-cache musl-dev build-base
+      - sed -i '/^\[patch\]/,/^$/d' Cargo.toml || true
+      - sed -i '/^\[patch\]/,/^$/d' crates/email-server/Cargo.toml || true
+      - cargo build --release -p email-server
+      - strip target/release/email-server
+      - cp target/release/email-server release/email-server
+      - cd release && tar czf ../email-rs-linux-x86_64.tar.gz .
+      - echo "Built $(du -sh ../email-rs-linux-x86_64.tar.gz | cut -f1) tarball"
+
+  # ── Build and push Docker image to Forgejo registry ──────────────────────────
+  - name: docker
+    image: woodpeckerci/plugin-docker-buildx
+    settings:
+      registry: repo.indexarr.net
+      repo: indexarr/email-rs
+      tags:
+        - latest
+        - ${CI_COMMIT_TAG}
+      username: indexarr
+      password:
+        from_secret: forgejo_token
+
+  # ── Upload tarball to Forgejo release ────────────────────────────────────────
+  - name: upload-assets
+    image: alpine:3.19
+    depends_on: [build-binary]
+    environment:
+      FORGEJO_TOKEN:
+        from_secret: git_auth_token
+    commands:
+      - apk add --no-cache curl jq
+      - |
+        set -e
+        TAG="${CI_COMMIT_TAG:-latest}"
+        BASE="${CI_FORGE_URL}/api/v1/repos/${CI_REPO}"
+        HEADERS="-H \"Authorization: token $FORGEJO_TOKEN\""
+
+        # Fetch release ID
+        REL_ID=$(curl -sf -H "Authorization: token $FORGEJO_TOKEN" \
+          "$BASE/releases/tags/$TAG" | jq -r '.id')
+        if [ -z "$REL_ID" ] || [ "$REL_ID" = "null" ]; then
+          echo "Release $TAG not found — creating"
+          REL_ID=$(curl -sf -X POST \
+            -H "Authorization: token $FORGEJO_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"$TAG\",\"name\":\"$TAG\",\"draft\":false}" \
+            "$BASE/releases" | jq -r '.id')
+        fi
+
+        # Remove existing asset with same name if present
+        EXISTING=$(curl -sf -H "Authorization: token $FORGEJO_TOKEN" \
+          "$BASE/releases/$REL_ID/assets" \
+          | jq -r '.[] | select(.name == "email-rs-linux-x86_64.tar.gz") | .id')
+        if [ -n "$EXISTING" ]; then
+          curl -sf -X DELETE -H "Authorization: token $FORGEJO_TOKEN" \
+            "$BASE/releases/$REL_ID/assets/$EXISTING"
+        fi
+
+        # Upload
+        curl -sf -X POST \
+          -H "Authorization: token $FORGEJO_TOKEN" \
+          -F "attachment=@email-rs-linux-x86_64.tar.gz" \
+          "$BASE/releases/$REL_ID/assets?name=email-rs-linux-x86_64.tar.gz"
+        echo "Uploaded email-rs-linux-x86_64.tar.gz to release $TAG"
+
+  # ── Notifications ─────────────────────────────────────────────────────────────
+  - name: discord-success
+    image: alpine:3.19
+    depends_on: [upload-assets, docker]
+    environment:
+      DISCORD_WEBHOOK_URL:
+        from_secret: discord_webhook_url
+    commands:
+      - apk add --no-cache curl
+      - |
+        HASH=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
+        TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        curl -sf -X POST "$DISCORD_WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          -d "{\"embeds\":[{\"title\":\"email-rs Linux release built\",\"description\":\"**$CI_REPO** — [${HASH}]($CI_REPO_URL/commit/$CI_COMMIT_SHA)\",\"color\":5025616,\"footer\":{\"text\":\"$CI_REPO — $CI_COMMIT_AUTHOR\"},\"timestamp\":\"$TS\"}]}" || true
+    when:
+      - status: [success]
+
+  - name: discord-failure
+    image: alpine:3.19
+    depends_on: [upload-assets, docker]
+    environment:
+      DISCORD_WEBHOOK_URL:
+        from_secret: discord_webhook_url
+    commands:
+      - apk add --no-cache curl
+      - |
+        HASH=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
+        TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        curl -sf -X POST "$DISCORD_WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          -d "{\"embeds\":[{\"title\":\"email-rs Linux release failed\",\"description\":\"**$CI_REPO** — [${HASH}]($CI_REPO_URL/commit/$CI_COMMIT_SHA)\",\"color\":15548997,\"footer\":{\"text\":\"$CI_REPO — $CI_COMMIT_AUTHOR\"},\"timestamp\":\"$TS\"}]}" || true
+    when:
+      - status: [failure]
