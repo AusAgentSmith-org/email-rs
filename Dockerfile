@@ -13,14 +13,6 @@ RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ ./crates/
-ARG GOOGLE_CLIENT_ID
-ARG GOOGLE_CLIENT_SECRET
-ARG MICROSOFT_CLIENT_ID
-ARG MICROSOFT_CLIENT_SECRET
-ENV GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
-ENV GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
-ENV MICROSOFT_CLIENT_ID=$MICROSOFT_CLIENT_ID
-ENV MICROSOFT_CLIENT_SECRET=$MICROSOFT_CLIENT_SECRET
 RUN cargo build --release -p email-server
 
 # ── Stage 3: Runtime ─────────────────────────────────��─────────────────────────
